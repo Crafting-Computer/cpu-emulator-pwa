@@ -7,10 +7,17 @@
   <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.20.0/min/vs/editor/editor.main.css">
 </head>
 <body>
+  <style>
+    html, body {
+      font-family: "Roboto Mono", monospace;
+      font-size: 18px;
+    }
+  </style>
   <div id="editor" style="width: 30vw; height: 92vh; border: grey 1px solid; margin: 0 20px; position: fixed; top: -100vh; z-index: 9999;"></div>
   <main></main>
   <div style="width: 1024px; height: 512px; position: fixed; top: 20px; right: 20px; z-index: 9999;">
-    <canvas id="screen" width="512px" height="256px" style="width: 100%; height: 100%;"></canvas>
+    <span>SCREEN</span>
+    <canvas id="screen" width="512px" height="256px" style="width: 100%; height: 100%; border: 2px solid grey;"></canvas>
   </div>
   <script>var require = { paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.20.0/min/vs/' } };</script>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.20.0/min/vs/loader.min.js"></script>
