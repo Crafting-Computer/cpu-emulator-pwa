@@ -150,6 +150,12 @@ styles =
   }
 
 
+romSize : Int
+romSize = 2 ^ 16
+
+ramSize : Int
+ramSize = 2 ^ 17
+
 init : () -> (Model, Cmd Msg)
 init _ =
   ( { computer =
@@ -157,8 +163,8 @@ init _ =
     , d = 0
     , m = 0
     , pc = 0
-    , rom = Array.repeat (2 ^ 16) 0
-    , ram = Array.repeat (2 ^ 17) 0
+    , rom = Array.repeat romSize 0
+    , ram = Array.repeat ramSize 0
     }
   , editingInstructionIndex =
     Nothing
@@ -171,7 +177,7 @@ init _ =
   , program =
     ""
   , instructions =
-    Array.repeat (2 ^ 16) ""
+    Array.repeat romSize ""
   , isRunningComputer =
     False
   , ramScroll =
@@ -774,21 +780,19 @@ stopEditingProgram model =
           Array.fromList <|
             List.map Assembler.instructionToString instructions
         
-        restOfOldInstructions =
-          Array.slice (Array.length updatedPartOfInstructions) (Array.length model.instructions) model.instructions
-        
         nextInstructions =
-          Array.append updatedPartOfInstructions restOfOldInstructions
+          Array.append
+            updatedPartOfInstructions
+            (Array.repeat (romSize - Array.length updatedPartOfInstructions) "")
 
         updatedPartOfRom =
           Array.fromList <|
             Assembler.emitProgram instructions
         
-        restOfOldRom =
-          Array.slice (Array.length updatedPartOfRom) (Array.length oldComputer.rom) oldComputer.rom
-        
         nextRom =
-          Array.append updatedPartOfRom restOfOldRom
+          Array.append
+            updatedPartOfRom
+            (Array.repeat (romSize - Array.length updatedPartOfRom) 0)
       in
       ({ model
         | instructions =

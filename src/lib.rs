@@ -16,13 +16,17 @@ extern crate serde_derive;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 
+const RAM_SIZE: usize = 131072; // 2 ^ 17
+const ROM_SIZE: usize = 65536; // 2 ^ 16
+
+
 struct Computer {
     a : i32,
     d : i32,
     m : i32,
     pc : u32,
-    ram : [i32; 131072],
-    rom : [i32; 65536],
+    ram : [i32; RAM_SIZE],
+    rom : [i32; ROM_SIZE],
 }
 
 #[derive(Serialize)]
@@ -47,13 +51,16 @@ static mut computer: Computer = Computer {
     d : 0,
     m : 0,
     pc : 0,
-    ram : [0; 131072], // 2 ^ 17
-    rom : [0; 65536], // 2 ^ 16
+    ram : [0; RAM_SIZE],
+    rom : [0; ROM_SIZE],
 };
 
 #[wasm_bindgen]
 pub fn edit_rom(values: Vec<i32>) {
     unsafe {
+    // reset all rom registers to 0
+    computer.rom = [0; ROM_SIZE];
+    // set the edited registers
     for (i, v) in values.iter().enumerate() {
         computer.rom[i] = *v;
     }
