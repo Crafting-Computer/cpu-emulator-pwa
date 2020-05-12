@@ -15,68 +15,93 @@ extern crate serde_derive;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Computer {
+
+struct Computer {
+    a : i32,
+    d : i32,
+    m : i32,
+    pc : u32,
+    ram : [i32; 131072],
+    rom : [i32; 65536],
+}
+
+#[derive(Serialize)]
+pub struct ComputerForJs {
     a : i32,
     d : i32,
     m : i32,
     pc : u32,
     ram : Vec<i32>,
-    rom : Vec<i32>,
-    #[serde(skip_deserializing)]
-    updated_pixels : Vec<Pixel>
-  }
+    updated_pixels : Vec<Pixel>,
+}
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 pub struct Pixel {
     x : i32,
     y : i32,
     color: (u8, u8, u8),
 }
 
+static mut computer: Computer = Computer {
+    a : 0,
+    d : 0,
+    m : 0,
+    pc : 0,
+    ram : [0; 131072], // 2 ^ 17
+    rom : [0; 65536], // 2 ^ 16
+};
+
 #[wasm_bindgen]
-pub fn step(cycles: usize, computer_in_json: &JsValue) -> JsValue {
-    let mut computer = decode_computer(computer_in_json);
+pub fn edit_rom(values: Vec<i32>) {
+    unsafe {
+    for (i, v) in values.iter().enumerate() {
+        computer.rom[i] = *v;
+    }
+    }
+}
+
+#[wasm_bindgen]
+pub fn edit_ram(index: usize, value: i32) {
+    unsafe {
+    computer.ram[index] = value;
+    }
+}
+
+#[wasm_bindgen]
+pub fn step(cycles: usize) -> JsValue {
+    unsafe {
+    let mut updated_pixels = Vec::new();
     for _ in 0..cycles {
-        // print("pc: ", computer.pc);
         match computer.rom.get(computer.pc as usize) {
             Some(instruction) => {
                 // print("instruction", instruction);
                 let op_code = get_bit(31, *instruction);
                 // print("op_code", op_code);
                 if !op_code {
-                    step_a_instruction(*instruction, &mut computer);
+                    step_a_instruction(*instruction);
                 } else {
-                    step_c_instruction(drop_bits(19, *instruction), &mut computer);
+                    updated_pixels.extend(step_c_instruction(drop_bits(19, *instruction)));
                 }
             }
             None => {}
         }
     }
-    JsValue::from_serde(&computer).unwrap()
-}
-
-
-fn decode_computer(computer_in_json: &JsValue) -> Computer {
-    match computer_in_json.into_serde() {
-      Ok(computer) => computer,
-      Err(err) => {
-        web_sys::console::log_1(&format!("{:#?}", err).into()); 
-        Computer {
-            a : 0,
-            d : 0,
-            m : 0,
-            pc : 0,
-            ram : Vec::new(),
-            rom : Vec::new(),
-            updated_pixels : Vec::new()
-        }
-      },
+    let new_computer =
+        ComputerForJs {
+            a : computer.a,
+            d : computer.d,
+            m : computer.m,
+            pc : computer.pc,
+            ram : computer.ram.to_vec(),
+            updated_pixels : updated_pixels,
+        };
+    
+    JsValue::from_serde(&new_computer).unwrap()
     }
 }
 
 
-fn step_a_instruction(number: i32, computer: &mut Computer) {
+unsafe fn step_a_instruction(number: i32) {
     computer.pc = computer.pc + 1;
     computer.a = number;
     match computer.ram.get(number as usize) {
@@ -87,18 +112,19 @@ fn step_a_instruction(number: i32, computer: &mut Computer) {
     }
 }
 
-fn step_c_instruction(instruction: i32, computer: &mut Computer) {
+unsafe fn step_c_instruction(instruction: i32) -> Vec<Pixel> {
     let computation_bits = ((instruction as u32) >> 6).try_into().unwrap();
     let destinations_bits = ((instruction as u32 & 0x38) >> 3).try_into().unwrap();
     let jump_bits = instruction & 0x7;
 
-    let computation_result = compute(computation_bits, computer);
+    let computation_result = compute(computation_bits);
 
-    move_program_counter(jump_bits, computation_result, computer);
-    store_computation_result(destinations_bits, computation_result, computer);
+    move_program_counter(jump_bits, computation_result);
+    let updated_pixels = store_computation_result(destinations_bits, computation_result);
+    updated_pixels
 }
 
-fn compute(computation_bits: i32, computer: &Computer) -> i32 {
+unsafe fn compute(computation_bits: i32) -> i32 {
     let d = computer.d;
     let a = computer.a;
     let m = computer.m;
@@ -137,7 +163,7 @@ fn compute(computation_bits: i32, computer: &Computer) -> i32 {
 }
 
 
-fn store_computation_result(destinations_bits: i32, result: i32, computer: &mut Computer) {
+unsafe fn store_computation_result(destinations_bits: i32, result: i32) -> Vec<Pixel> {
     let store_to_a_register = get_bit(2, destinations_bits);
     let new_a_register =
         if store_to_a_register {
@@ -170,6 +196,8 @@ fn store_computation_result(destinations_bits: i32, result: i32, computer: &mut 
     }
     // print("successfully stored to ram", ());
 
+    let mut updated_pixels = Vec::new();
+
     if store_to_m_register {
         if 2i32.pow(16) <= computer.a
         && computer.a <= 2i32.pow(16) + 2i32.pow(15) {
@@ -186,29 +214,31 @@ fn store_computation_result(destinations_bits: i32, result: i32, computer: &mut 
 
             let x1 = x;
             let color1 = css_color_from_8_bits((all_colors & 0xFF000000 >> 24).try_into().unwrap());
-            computer.updated_pixels.push(Pixel { x : x1, y : y, color : color1 });
+            updated_pixels.push(Pixel { x : x1, y : y, color : color1 });
 
             let x2 = x + 1;
             let color2 = css_color_from_8_bits((all_colors & 0xFF000000 >> 16).try_into().unwrap());
-            computer.updated_pixels.push(Pixel { x : x2, y : y, color : color2 });
+            updated_pixels.push(Pixel { x : x2, y : y, color : color2 });
             
             let x3 = x + 2;
             let color3 = css_color_from_8_bits((all_colors & 0xFF000000 >> 8).try_into().unwrap());
-            computer.updated_pixels.push(Pixel { x : x3, y : y, color : color3 });
+            updated_pixels.push(Pixel { x : x3, y : y, color : color3 });
             
             let x4 = x + 3;
             let color4 = css_color_from_8_bits((all_colors & 0xFF000000).try_into().unwrap());
-            computer.updated_pixels.push(Pixel { x : x4, y : y, color : color4 });
+            updated_pixels.push(Pixel { x : x4, y : y, color : color4 });
         }
     }
 
     computer.a = new_a_register;
     computer.d = new_d_register;
     computer.m = new_m_register;
+
+    updated_pixels
 }
 
 
-fn move_program_counter(jump_bits: i32, computation_result: i32, computer: &mut Computer) {
+unsafe fn move_program_counter(jump_bits: i32, computation_result: i32) {
     let zr = computation_result == 0;
     let ng = computation_result < 0;
 

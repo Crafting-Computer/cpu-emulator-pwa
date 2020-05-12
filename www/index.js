@@ -89,10 +89,18 @@ editor.onDidChangeModelContent(function(event) {
   app.ports.editProgramPort.send(editor.getValue({ lineEnding : "\n"}));
 });
 
-app.ports.stepComputerPort.subscribe(function([cycles, computerInJson]) {
-  let newComputer = wasm.step(cycles, computerInJson);
-  app.ports.receiveComputerPort.send(newComputer);
+app.ports.stepComputerPort.subscribe(function(cycles) {
+  let newComputer = wasm.step(cycles);
   updateScreen(newComputer.updated_pixels);
+  app.ports.receiveComputerPort.send(newComputer);
+});
+
+app.ports.editRomPort.subscribe(function(values) {
+  wasm.edit_rom(values);
+});
+
+app.ports.editRamPort.subscribe(function([index, value]) {
+  wasm.edit_ram(index, value);
 });
 
 function updateScreen(pixels) {

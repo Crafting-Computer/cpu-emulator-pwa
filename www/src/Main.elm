@@ -31,8 +31,10 @@ port editProgramPort : (String -> msg) -> Sub msg
 port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
 port scrollIntoViewPort : String -> Cmd msg
-port stepComputerPort : (Int, Encode.Value) -> Cmd msg
+port stepComputerPort : Int -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
+port editRomPort : Array Int -> Cmd msg
+port editRamPort : (Int, Int) -> Cmd msg
 
 
 type alias Model =
@@ -111,7 +113,6 @@ decodeComputer =
   Field.require "m" Decode.int <| \m ->
   Field.require "pc" Decode.int <| \pc ->
   Field.require "ram" (Decode.array Decode.int) <| \ram ->
-  Field.require "rom" (Decode.array Decode.int) <| \rom ->
 
   Decode.succeed
     { a = a
@@ -119,7 +120,7 @@ decodeComputer =
     , m = m
     , pc = pc
     , ram = ram
-    , rom = rom
+    , rom = Array.empty
     }
 
 type alias Memory =
@@ -202,9 +203,9 @@ msgToCmd x =
     Task.perform identity (Task.succeed x)
 
 
-step : Int -> Computer -> Cmd Msg
-step cycles computer =
-  stepComputerPort (cycles, encodeComputer computer)
+step : Int -> Cmd Msg
+step cycles =
+  stepComputerPort cycles
 
 view : Model -> Html Msg
 view model =
@@ -597,7 +598,15 @@ receivedComputer : Decode.Value -> Model -> (Model, Cmd Msg)
 receivedComputer json model =
   ({ model
       | computer =
-        Result.withDefault model.computer <| Decode.decodeValue decodeComputer json
+        Result.withDefault model.computer <|
+        Result.map
+          (\computer ->
+            { computer
+              | rom =
+                model.computer.rom
+            }
+          )<|
+        Decode.decodeValue decodeComputer json
     }
     , Cmd.none
     )
@@ -630,7 +639,7 @@ stepComputer model =
   in
   ( model
   , Cmd.batch
-    [ step 1 model.computer
+    [ step 1
     , if model.isAnimated then
       scrollIntoViewPort instructionId
     else
@@ -643,13 +652,13 @@ stepComputerOneFrame : Float -> Model -> (Model, Cmd Msg)
 stepComputerOneFrame time model =
   let
     timeToRun =
-      min time 1000
+      min (max 150 time) 1000
     
     cycles =
-      ceiling ((timeToRun / 1000) * 20 * 256 * 1024)
+      ceiling ((timeToRun / 1000) * 3000 * 1024)
   in
   ( model
-  , step cycles model.computer
+  , step cycles
   )
 
 
@@ -688,19 +697,22 @@ startEditingRam index model =
 
 
 editRam : Int -> String -> Model -> (Model, Cmd Msg)
-editRam index newValue model =
+editRam index newValueStr model =
   let
     oldComputer =
       model.computer
+    
+    newValue =
+      Maybe.withDefault 0 <| String.toInt newValueStr
   in
   ({ model
     | computer =
       { oldComputer
         | ram =
-          storeToMemory index (Maybe.withDefault 0 <| String.toInt newValue) oldComputer.ram
+          storeToMemory index newValue oldComputer.ram
       }
   }
-  , Cmd.none
+  , editRamPort (index, newValue)
   )
 
 
@@ -785,7 +797,10 @@ stopEditingProgram model =
         , isEditingProgram =
           False
       }
-      , hideProgramEditorPort ()
+      , Cmd.batch
+        [ hideProgramEditorPort ()
+        , editRomPort updatedPartOfRom
+        ]
       )
     
     Err _ ->
