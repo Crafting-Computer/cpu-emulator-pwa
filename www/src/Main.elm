@@ -35,6 +35,7 @@ port stepComputerPort : Int -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
+port resetComputerPort : () -> Cmd msg
 
 
 type alias Model =
@@ -627,7 +628,10 @@ resetComputer model =
     , isRunningComputer =
       False
   }
-  , scrollIntoViewPort "instruction0"
+  , Cmd.batch
+    [ scrollIntoViewPort "instruction0"
+    , resetComputerPort ()
+    ]
   )
 
 

@@ -68,6 +68,13 @@ pub fn edit_ram(index: usize, value: i32) {
 }
 
 #[wasm_bindgen]
+pub fn reset() {
+    unsafe {
+    computer.pc = 0;
+    }
+}
+
+#[wasm_bindgen]
 pub fn step(cycles: usize) -> JsValue {
     unsafe {
     let mut updated_pixels = Vec::new();

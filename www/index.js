@@ -110,6 +110,10 @@ function updateScreen(pixels) {
   });
 }
 
+app.ports.resetComputerPort.subscribe(function() {
+  wasm.reset();
+});
+
 app.ports.scrollIntoViewPort.subscribe(function(id) {
   var element = document.getElementById(id);
   element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
