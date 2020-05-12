@@ -1,0 +1,20 @@
+{
+  "short_name": "cpu-emulator-pwa",
+  "name": "cpu-emulator-pwa",
+  "icons": [
+    {
+      "src": "./icons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#f74c00",
+  "background_color": "#ffffff"
+}
