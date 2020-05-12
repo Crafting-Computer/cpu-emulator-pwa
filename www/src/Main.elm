@@ -296,7 +296,6 @@ viewRom model =
   in
   E.column
     [ E.width <| E.px 200
-    , E.htmlAttribute <| Html.Attributes.style "height" "640px"
     ] <|
     [ E.text "ROM"
     , indexedTable
@@ -367,7 +366,6 @@ viewRam model =
   in
   E.column
     [ E.width <| E.px 200
-    , E.htmlAttribute <| Html.Attributes.style "height" "640px"
     ] <|
     [ E.text "RAM"
     , indexedTable
