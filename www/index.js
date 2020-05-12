@@ -105,7 +105,7 @@ app.ports.editRamPort.subscribe(function([index, value]) {
 
 function updateScreen(pixels) {
   pixels.forEach(function({ x, y, color }) {
-    screen.fillStyle = "rgb(" + color.join(",") + ")";
+    screen.fillStyle = color;
     screen.fillRect( x, y, 1, 1 );
   });
 }
