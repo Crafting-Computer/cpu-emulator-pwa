@@ -18,4 +18,7 @@ module.exports = {
       skipWaiting: true,
     }),
   ],
+  devServer: {
+    contentBase: path.join(__dirname, 'dist'),
+  }
 };

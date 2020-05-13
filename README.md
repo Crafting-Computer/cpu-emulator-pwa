@@ -1,6 +1,15 @@
-# elm-rust-template
+# CPU Emulator
 
-A convenient template for creating a progressive web app using Elm and Rust.
+Emulate a simple 32-bit CPU containing
+
+* Screen: 512 * 256 * (8 bit color per pixel) or 2 ^ 15 registers each holding 4 pixels
+* Ram: 2 ^ 16 registers
+  - technically 2 ^ 17 because the screen memory map is embedded in the ram
+  - the last 2 ^ 15 registers are not used
+* Rom: 2 ^ 16 registers
+* Register: 32 bits
+
+# Development
 
 # Set up
 ## Elm
@@ -43,13 +52,7 @@ If you already have npm installed, make sure it is up to date with this command:
 npm install npm@latest -g
 ```
 
-# Usage
-
-## Clone this template
-```
-cargo generate --git https://github.com/AlienKevin/elm-rust-template
-```
-This should prompt you for the new project's name.
+# Build development version
 
 ## Build Rust into WebAssembly
 In the project root:
@@ -87,7 +90,8 @@ Navigate your Web browser to http://localhost:8080/ and you should see the defau
 
 All new changes will be automatically reflected on http://localhost:8080/.
 
-## Deploy for a new release
+# Deployment
+
 In the root directory.
 
 Create an optimized release build from Rust to WebAssembly.
@@ -100,67 +104,19 @@ Bundle, optimize, and minimize all JavaScript and Elm for smaller asset size and
 ```
 npm run build
 ```
-Now you should see a `dist` folder within `www` similar to this:
-```
-www
-├── ...
-├── dist
-    ├── 1.bootstrap.js
-    ├── 27911fde1b082c3d4.module.wasm
-    ├── bootstrap.js
-    ├── index.html
-    ├── ...
-├── ...
-```
-This template uses set all build processes to production mode so all assets including JavaScript and WebAssembly are optimized and minimized. 
 
-## Publish to Github Pages
-Follow all the previous steps outlined in deployment instructions. Then push the `www/dist` folder to the `gh-pages` branch on GitHub.
-```
-git subtree push --prefix www/dist origin gh-pages
-```
+You are all set for the new optimized version.
 
-## Customization
-### Logos
-This template by defaults uses the a combination of ico and png files to provide best logo resolutions for all popular platforms. Included logo files are:
+# Change Log
 
-```
-www
-  ├── android-chrome-192x192.png
-  ├── android-chrome-512x512.png
-  ├── apple-touch-icon.png
-  ├── favicon-16x16.png
-  ├── favicon-32x32.png
-  ├── favicon.ico
-```
-To customize the logo used, go to https://favicon.io/ and generate your own logo files from text, image, or emoji. You are also welcome to user other logo generation tools but I found favicon.io easy and fast. Once you have the 6 files listed above, simply replace the originals and no further configurations are needed.
+## Release v0.1.0
 
-### Theme color and background color
-Theme color specifies the color of the browser address bar. Background colors specifies the background color of the splash screen when the browser tries to load your app. You can change both of them in `www/manifest.json`:
-```json
-{
-  ...
-  "theme_color": "#f74c00",
-  "background_color": "#ffffff"
-}
-```
-You should also change the `theme-color` meta-tag in the `<head>` of `www/index.html` to match the value specified in `www/manifest.json`:
-```html
-<meta name="theme-color" content="#f74c00">
-```
-
-# Porting existing Elm apps
-Currently there are no automated way but it's still very easy.
-
-1. Copy all your Elm files into the `www/src` directory
-2. Modify the `www/index.html` and `www/index.js` to configure ports and HTML layouts.
-3. No step 3 because you are all set now. Just follow the above steps in building and shipping your project.
-
-# Examples using elm-rust-template
-[Hack Assembler](https://github.com/AlienKevin/hack-assembler-web): An assembler for the Hack assembly language
-
-# Credits
-Template and README adapted from [The Rust and Wasm Book](https://rustwasm.github.io/docs/book/introduction.html). Github Pages deployment instruction from [gh-pages-deploy](https://gist.github.com/cobyism/4730490)
+* Fix 8-bit color mapping
+* Increase emulation speed
+* Reset program counter in wasm in addition to Elm
+* Update logo and html
+* Fix view layout
+* Remove redundant files
 
 # License
 MIT
