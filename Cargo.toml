@@ -41,7 +41,7 @@ features = ["console"]
 
 [profile.release]
 lto = true           # enable advanced / slower LLVM optimizations
-opt-level = 'z'      # or `s` for size ; value `3` for speed
+opt-level = 3      # or `s` for size ; value `3` for speed
 codegen-units = 1    # run in a single thread to perform single-thread optimizations
 
 [package.metadata.wasm-pack.profile.release]
