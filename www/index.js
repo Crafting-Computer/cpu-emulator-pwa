@@ -85,16 +85,10 @@ var app = Elm.Main.init({ node: document.querySelector("main") });
 
 var screen = document.getElementById("screen").getContext('2d');
 
+wasm.initialize();
+
 editor.onDidChangeModelContent(function(event) {
   app.ports.editProgramPort.send(editor.getValue({ lineEnding : "\n"}));
-});
-
-document.addEventListener("keydown", function(event) {
-  wasm.set_key_code(event.keyCode);
-});
-
-document.addEventListener("keyup", function() {
-  wasm.set_key_code(0);
 });
 
 app.ports.stepComputerPort.subscribe(function([ramDisplaySize, cycles]) {

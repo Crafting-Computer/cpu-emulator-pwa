@@ -1,10 +1,12 @@
 mod utils;
 
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use std::convert::TryInto;
 extern crate serde_json;
 extern crate web_sys;
 use std::fmt::Debug;
+use gloo_events::EventListener;
 
 #[macro_use]
 extern crate serde_derive;
@@ -57,9 +59,23 @@ static mut computer: Computer = Computer {
 };
 
 #[wasm_bindgen]
-pub fn set_key_code(code: i32) {
+pub fn initialize() {
     unsafe {
-    computer.ram[KEYBOARD] = code;
+    let window = web_sys::window().expect("global window does not exists");    
+    let document = window.document().expect("expecting a document on window");
+    print("initializing keyboard listeners", "");
+    let on_keydown = EventListener::new(&document, "keydown", move |event| {
+        let event = event.clone().dyn_into::<web_sys::KeyboardEvent>().unwrap_throw();
+        let key_code = event.key_code();
+        // print("key down", key_code);
+        computer.ram[KEYBOARD] = key_code as i32;
+    });
+    let on_keyup = EventListener::new(&document, "keyup", |_| {
+        // print("key up", "");
+        computer.ram[KEYBOARD] = 0;
+    });
+    on_keydown.forget();
+    on_keyup.forget();
     }
 }
 

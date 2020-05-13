@@ -109,6 +109,13 @@ You are all set for the new optimized version.
 
 # Change Log
 
+## Release v0.2.0
+
+* Only send visible section of ram from rust to elm
+* Support keyboard through key codes
+* Make screen size responsive
+* Optimize rust and wasm for speed instead of size
+
 ## Release v0.1.0
 
 * Fix 8-bit color mapping

@@ -14,6 +14,7 @@ default = ["console_error_panic_hook"]
 serde_json = "1.0.32"
 serde_derive = "1.0.80"
 serde = "1.0.80"
+gloo-events = "0.1.1"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -37,7 +38,7 @@ features = ["serde-serialize"]
 
 [dependencies.web-sys]
 version = "0.3"
-features = ["console"]
+features = ["console", "Window", "Document", "KeyboardEvent"]
 
 [profile.release]
 lto = true           # enable advanced / slower LLVM optimizations
