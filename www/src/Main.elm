@@ -692,7 +692,7 @@ stepComputerOneFrame : Float -> Model -> (Model, Cmd Msg)
 stepComputerOneFrame time model =
   let
     timeToRun =
-      min (max 300 time) 1000
+      min (max 170 time) 1000
     
     cycles =
       ceiling ((timeToRun / 1000) * 3000 * 1024)
