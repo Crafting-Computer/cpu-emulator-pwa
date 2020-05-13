@@ -18,9 +18,10 @@ extern crate serde_derive;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 
-const RAM_SIZE: usize = 131072; // 2 ^ 17
+const RAM_SIZE: usize = 84737; // 2 ^ 16 + 19200 + 1
 const ROM_SIZE: usize = 65536; // 2 ^ 16
-const KEYBOARD: usize = 98304; // 2 ^ 16 + 2 ^ 15
+const SCREEN: usize = 65536;   // 2 ^ 16
+const KEYBOARD: usize = 84736; // 2 ^ 16 + 19200
 
 
 struct Computer {
@@ -241,11 +242,11 @@ unsafe fn store_computation_result(destinations_bits: i32, result: i32) -> Vec<P
     let mut updated_pixels = Vec::new();
 
     if store_to_m_register {
-        if 2i32.pow(16) <= computer.a
-        && computer.a <= 2i32.pow(16) + 2i32.pow(15) {
-            let width = 512 / 4;
+        if SCREEN as i32 <= computer.a
+        && computer.a < KEYBOARD as i32 {
+            let width = 320 / 4;
             // print("width", width);
-            let offset = computer.a - 2i32.pow(16);
+            let offset = computer.a - SCREEN as i32;
             // print("offset", offset);
             let x = 4 * (offset % width);
             // print("x", x);
