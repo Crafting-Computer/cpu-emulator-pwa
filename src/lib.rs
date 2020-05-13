@@ -1,11 +1,9 @@
-mod utils;
-
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::convert::TryInto;
 extern crate serde_json;
 extern crate web_sys;
-use std::fmt::Debug;
+// use std::fmt::Debug;
 use gloo_events::EventListener;
 
 #[macro_use]
@@ -64,7 +62,7 @@ pub fn initialize() {
     unsafe {
     let window = web_sys::window().expect("global window does not exists");    
     let document = window.document().expect("expecting a document on window");
-    print("initializing keyboard listeners", "");
+    // print("initializing keyboard listeners", "");
     let on_keydown = EventListener::new(&document, "keydown", move |event| {
         let event = event.clone().dyn_into::<web_sys::KeyboardEvent>().unwrap_throw();
         let key_code = event.key_code();
@@ -361,8 +359,8 @@ fn drop_bits(drop_amount: usize, bits: i32) -> i32 {
     (((bits as u32) << drop_amount) >> drop_amount).try_into().unwrap()
 }
 
-fn print<T>(name: &str, thing: T)
-where T : Debug
-{
-    web_sys::console::log_1(&format!("{}: {:#?}", name, thing).into());
-}
+// fn print<T>(name: &str, thing: T)
+// where T : Debug
+// {
+//     web_sys::console::log_1(&format!("{}: {:#?}", name, thing).into());
+// }
