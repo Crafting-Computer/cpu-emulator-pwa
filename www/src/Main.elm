@@ -31,7 +31,7 @@ port editProgramPort : (String -> msg) -> Sub msg
 port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
 port scrollIntoViewPort : String -> Cmd msg
-port stepComputerPort : Int -> Cmd msg
+port stepComputerPort : (Int, Int) -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
@@ -158,13 +158,17 @@ ramSize = 2 ^ 17
 
 init : () -> (Model, Cmd Msg)
 init _ =
+  let
+    ramDisplaySize =
+      50
+  in
   ( { computer =
     { a = 0
     , d = 0
     , m = 0
     , pc = 0
     , rom = Array.repeat romSize 0
-    , ram = Array.repeat ramSize 0
+    , ram = Array.repeat ramDisplaySize 0
     }
   , editingInstructionIndex =
     Nothing
@@ -183,7 +187,7 @@ init _ =
   , ramScroll =
     InfiniteScroll.init loadMoreRam
   , ramDisplaySize =
-    50
+    ramDisplaySize
   , romScroll =
     InfiniteScroll.init loadMoreRom
   , romDisplaySize =
@@ -210,9 +214,10 @@ msgToCmd x =
     Task.perform identity (Task.succeed x)
 
 
-step : Int -> Cmd Msg
-step cycles =
-  stepComputerPort cycles
+step : Int -> Int -> Cmd Msg
+step ramDisplaySize cycles =
+  stepComputerPort (ramDisplaySize, cycles)
+
 
 view : Model -> Html Msg
 view model =
@@ -576,10 +581,37 @@ update msg model =
 
     LoadedMoreRam ->
       let
+        oldComputer =
+          model.computer
+        
         nextRamScroll =
           InfiniteScroll.stopLoading model.ramScroll
+        
+        nextRamDisplaySize =
+          model.ramDisplaySize + 200
+
+        ramSizeDifference =
+          nextRamDisplaySize - Array.length model.computer.ram
+
+        nextRam =
+          if ramSizeDifference > 0 then
+            Array.append
+              model.computer.ram
+              (Array.repeat ramSizeDifference 0)
+          else
+            model.computer.ram
       in
-      ( { model | ramScroll = nextRamScroll, ramDisplaySize = model.ramDisplaySize + 200 }, Cmd.none )
+      ( { model
+        | ramScroll = nextRamScroll
+        , ramDisplaySize = nextRamDisplaySize
+        , computer =
+          { oldComputer
+            | ram =
+              nextRam
+          }
+      }
+      , Cmd.none
+      )
 
     RomScrollMsg scrollMsg ->
       let
@@ -647,7 +679,7 @@ stepComputer model =
   in
   ( model
   , Cmd.batch
-    [ step 1
+    [ step model.ramDisplaySize 1
     , if model.isAnimated then
       scrollIntoViewPort instructionId
     else
@@ -660,13 +692,13 @@ stepComputerOneFrame : Float -> Model -> (Model, Cmd Msg)
 stepComputerOneFrame time model =
   let
     timeToRun =
-      min (max 150 time) 1000
+      min (max 300 time) 1000
     
     cycles =
       ceiling ((timeToRun / 1000) * 3000 * 1024)
   in
   ( model
-  , step cycles
+  , step model.ramDisplaySize cycles
   )
 
 
@@ -834,7 +866,3 @@ storeToMemory : Int -> Int -> Memory -> Memory
 storeToMemory address value memory =
   Array.set address value memory
 
-
-toBinaryString : Int -> String
-toBinaryString number =
-  String.join "" <| List.map String.fromInt <| Binary.toIntegers <| Binary.fromDecimal number

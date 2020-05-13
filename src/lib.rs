@@ -90,7 +90,7 @@ pub fn reset() {
 }
 
 #[wasm_bindgen]
-pub fn step(cycles: usize) -> JsValue {
+pub fn step(ram_display_size: usize, cycles: usize) -> JsValue {
     unsafe {
     let mut updated_pixels = Vec::new();
     for _ in 0..cycles {
@@ -114,7 +114,7 @@ pub fn step(cycles: usize) -> JsValue {
             d : computer.d,
             m : computer.m,
             pc : computer.pc,
-            ram : computer.ram.to_vec(),
+            ram : computer.ram[..ram_display_size].to_vec(),
             updated_pixels : updated_pixels,
         };
     

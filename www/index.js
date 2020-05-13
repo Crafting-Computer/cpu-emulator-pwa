@@ -97,8 +97,8 @@ document.addEventListener("keyup", function() {
   wasm.set_key_code(0);
 });
 
-app.ports.stepComputerPort.subscribe(function(cycles) {
-  let newComputer = wasm.step(cycles);
+app.ports.stepComputerPort.subscribe(function([ramDisplaySize, cycles]) {
+  let newComputer = wasm.step(ramDisplaySize, cycles);
   updateScreen(newComputer.updated_pixels);
   app.ports.receiveComputerPort.send(newComputer);
 });
