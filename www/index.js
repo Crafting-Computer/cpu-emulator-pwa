@@ -89,6 +89,14 @@ editor.onDidChangeModelContent(function(event) {
   app.ports.editProgramPort.send(editor.getValue({ lineEnding : "\n"}));
 });
 
+document.addEventListener("keydown", function(event) {
+  wasm.set_key_code(event.keyCode);
+});
+
+document.addEventListener("keyup", function() {
+  wasm.set_key_code(0);
+});
+
 app.ports.stepComputerPort.subscribe(function(cycles) {
   let newComputer = wasm.step(cycles);
   updateScreen(newComputer.updated_pixels);

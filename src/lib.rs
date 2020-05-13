@@ -18,6 +18,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 const RAM_SIZE: usize = 131072; // 2 ^ 17
 const ROM_SIZE: usize = 65536; // 2 ^ 16
+const KEYBOARD: usize = 98304; // 2 ^ 16 + 2 ^ 15
 
 
 struct Computer {
@@ -54,6 +55,13 @@ static mut computer: Computer = Computer {
     ram : [0; RAM_SIZE],
     rom : [0; ROM_SIZE],
 };
+
+#[wasm_bindgen]
+pub fn set_key_code(code: i32) {
+    unsafe {
+    computer.ram[KEYBOARD] = code;
+    }
+}
 
 #[wasm_bindgen]
 pub fn edit_rom(values: Vec<i32>) {
