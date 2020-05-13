@@ -109,6 +109,11 @@ You are all set for the new optimized version.
 
 # Change Log
 
+## Release v0.3.0
+
+* Smaller screen size (shrink from 512x256 to 320x240), better performance.
+* Adjust to optimal cycle numbers per frame -> remove most visual lags
+
 ## Release v0.2.0
 
 * Only send visible section of ram from rust to elm
