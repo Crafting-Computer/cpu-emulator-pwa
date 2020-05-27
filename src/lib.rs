@@ -277,7 +277,10 @@ unsafe fn store_computation_result(destinations_bits: i32, result: i32) -> Vec<P
 
     computer.a = new_a_register;
     computer.d = new_d_register;
-    computer.m = new_m_register;
+    computer.m = match computer.ram.get(new_a_register as usize) {
+        Some(value) => *value,
+        None => new_m_register,
+    };
 
     // print("successfully stored to ram", ());
 
