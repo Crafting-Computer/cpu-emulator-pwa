@@ -2,6 +2,7 @@ port module Main exposing (main)
 
 
 import Array exposing (Array)
+import Array.Extra
 import Html exposing (Html)
 import Html.Attributes
 import Browser
@@ -24,7 +25,8 @@ import Json.Decode.Field as Field
 
 port showProgramEditorPort : () -> Cmd msg
 port hideProgramEditorPort : () -> Cmd msg
-port editProgramPort : (String -> msg) -> Sub msg
+port editProgramInElmPort : (String -> msg) -> Sub msg
+port editProgramInEditorPort : String -> Cmd msg
 port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
 port scrollIntoViewPort : String -> Cmd msg
@@ -39,9 +41,10 @@ port resetComputerPort : Int -> Cmd msg
 
 type alias Model =
   { computer : Computer
+  , programs : Array AsmProgram
+  , activeProgramIndex : Int
   , assemblerError : Maybe String
   , isEditingProgram : Bool
-  , program : String
   , instructions : Array String
   , isRunningComputer : Bool
   , ramSections : Int
@@ -95,6 +98,12 @@ type alias Computer =
 
 type alias Range =
   (Int, Int)
+
+
+type alias AsmProgram =
+  { name : String
+  , content : String
+  }
 
 
 encodeComputer : Computer -> Encode.Value
@@ -163,43 +172,114 @@ init _ =
   let
     ramDisplaySize =
       501
+    
+    programs =
+      [ { name = "FillScreenOnKeyPress"
+      , content =
+        """-- Runs an infinite loop that listens to the keyboard input.
+-- When a key is pressed (any key), the program blackens the screen,
+-- i.e. writes "black" in every pixel;
+-- the screen should remain fully black as long as the key is pressed. 
+-- When no key is pressed, the program clears the screen, i.e. writes
+-- "white" in every pixel;
+-- the screen should remain fully clear as long as no key is pressed.
+
+@19200
+D=A
+@size
+M=D
+
+(LOOP)
+  @KBD
+  A=M
+  D=A
+  @i
+  M=0
+  @FILL
+  D;JNE
+  (CLEAR)
+    @i
+    D=M
+    @size
+    D=D-M
+    @LOOP
+    D;JGE
+    @i
+    D=M
+    @SCREEN
+    A=D+A
+    M=-1
+    @i
+    M=M+1
+    @CLEAR
+    0;JMP
+  (FILL)
+    @i
+    D=M
+    @size
+    D=D-M
+    @LOOP
+    D;JGE
+    @i
+    D=M
+    @SCREEN
+    A=D+A
+    M=0
+    @i
+    M=M+1
+    @FILL
+    0;JMP
+  @LOOP
+  0;JMP
+"""
+      }
+      ]
+    
+    (model, editRomCmd) =
+      stopEditingProgram
+      { computer =
+        { a = 0
+        , d = 0
+        , m = 0
+        , pc = 0
+        , rom = Array.repeat romSize 0
+        , ram = Array.repeat ramDisplaySize 0
+        }
+      , programs =
+        Array.fromList programs
+      , activeProgramIndex =
+        0
+      , assemblerError =
+        Nothing
+      , isEditingProgram =
+        False
+      , instructions =
+        Array.repeat romSize ""
+      , isRunningComputer =
+        False
+      , ramSections =
+        2
+      , ramRanges =
+        Array.fromList [ (0, 256)
+        , (256, 501)
+        ]
+      , editingRamIndices =
+        Array.fromList [ Nothing, Nothing ]
+      , ramDisplaySize =
+        ramDisplaySize
+      , romScroll =
+        InfiniteScroll.init loadMoreRom
+      , romDisplaySize =
+        50
+      , isAnimated =
+        True
+      }
   in
-  ( { computer =
-    { a = 0
-    , d = 0
-    , m = 0
-    , pc = 0
-    , rom = Array.repeat romSize 0
-    , ram = Array.repeat ramDisplaySize 0
-    }
-  , assemblerError =
-    Nothing
-  , isEditingProgram =
-    False
-  , program =
-    ""
-  , instructions =
-    Array.repeat romSize ""
-  , isRunningComputer =
-    False
-  , ramSections =
-    2
-  , ramRanges =
-    Array.fromList [ (0, 256)
-    , (256, 501)
+  ( model
+  , Cmd.batch
+    [ editProgramInEditorPort <| .content <| getActiveProgram model
+    , editRomCmd
     ]
-  , editingRamIndices =
-    Array.fromList [ Nothing, Nothing ]
-  , ramDisplaySize =
-    ramDisplaySize
-  , romScroll =
-    InfiniteScroll.init loadMoreRom
-  , romDisplaySize =
-    50
-  , isAnimated =
-    True
-  }
-  , Cmd.none
   )
 
 
@@ -768,20 +848,27 @@ stopEditingRam ramIndex cellIndex model =
 
 
 editProgram : String -> Model -> (Model, Cmd Msg)
-editProgram newProgram model =
-  case Assembler.parseProgram newProgram of
+editProgram newContent model =
+  let
+    newPrograms =
+      Array.Extra.update
+      model.activeProgramIndex
+      (\oldProgram -> { oldProgram | content = newContent })
+      model.programs
+  in
+  case Assembler.parseProgram newContent of
     Ok _ ->
       ( { model
-        | program =
-          newProgram
+        | programs =
+          newPrograms
         }
       , clearAssemblerErrorPort ()
       )
 
     Err error ->
       ( { model
-        | program =
-          newProgram
+        | programs =
+          newPrograms
         , assemblerError =
           Just <| Tuple.second error
         }
@@ -799,9 +886,15 @@ startEditingProgram model =
   )
 
 
+getActiveProgram : Model -> AsmProgram
+getActiveProgram model =
+  Maybe.withDefault { name = "IMPOSSIBLE", content = "IMPOSSIBLE"} <| -- impossible
+  Array.get model.activeProgramIndex model.programs
+
+
 stopEditingProgram : Model -> (Model, Cmd Msg)
 stopEditingProgram model =
-  case Assembler.parseProgram model.program of
+  case Assembler.parseProgram <| .content <| getActiveProgram model of
     Ok instructions ->
       let
         oldComputer =
@@ -854,7 +947,7 @@ stopEditingProgram model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.batch
-    [ editProgramPort EditProgram
+    [ editProgramInElmPort EditProgram
     , if model.isRunningComputer then
       Browser.Events.onAnimationFrameDelta StepComputerOneFrame
     else
