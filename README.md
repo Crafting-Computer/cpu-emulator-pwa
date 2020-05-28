@@ -109,6 +109,13 @@ You are all set for the new optimized version.
 
 # Change Log
 
+## Release v0.4.0
+
+* [Emulator Bug Fix] Update virtual register M in C instruction according to register A
+* Only pass updated pixels when StepComputerOneFrame
+* Split RAM display into two parts
+* Keep a list of programs
+
 ## Release v0.3.0
 
 * Smaller screen size (shrink from 512x256 to 320x240), better performance.
