@@ -116,9 +116,14 @@ type alias Range =
   (Int, Int)
 
 
+type alias Layout =
+  Array Range
+
+
 type alias AsmProgram =
   { name : String
   , content : String
+  , layout : Layout
   }
 
 
@@ -136,20 +141,46 @@ encodeProgram program =
   Encode.object
     [ ("name", Encode.string program.name)
     , ("content", Encode.string program.content)
+    , ("layout", encodeLayout program.layout)
     ]
+
+
+encodeLayout : Layout -> Encode.Value
+encodeLayout layout =
+  Encode.array encodeRange layout
+
+
+encodeRange : Range -> Encode.Value
+encodeRange (start, end) =
+  Encode.list identity [ Encode.int start, Encode.int end ]
 
 
 decodeProgram : Decoder AsmProgram
 decodeProgram =
   Field.require "name" Decode.string <| \name ->
   Field.require "content" Decode.string <| \content ->
+  Field.require "layout" decodeLayout <| \layout ->
 
   Decode.succeed
     { name =
       name
     , content =
       content
+    , layout =
+      layout
     }
+
+
+decodeLayout : Decoder Layout
+decodeLayout =
+  Decode.array decodeRange
+
+
+decodeRange : Decoder Range
+decodeRange =
+  Decode.map2 Tuple.pair 
+    (Decode.index 0 Decode.int)
+    (Decode.index 1 Decode.int)
 
 
 decodeModel : Decoder Model
@@ -158,15 +189,16 @@ decodeModel =
   Field.require "activeProgramIndex" Decode.int <| \activeProgramIndex ->
   Field.require "computer" decodeComputer <| \computer ->
 
-  Decode.succeed
-    { defaultModel
-      | computer =
-        computer
-      , programs =
-        programs
-      , activeProgramIndex =
-        activeProgramIndex
-    }
+  Decode.succeed <|
+    updateLayout
+      { defaultModel
+        | computer =
+          computer
+        , programs =
+          programs
+        , activeProgramIndex =
+          activeProgramIndex
+      }
 
 
 encodeComputer : Computer -> Encode.Value
@@ -238,16 +270,14 @@ defaultModel : Model
 defaultModel =
   let
     ramDisplaySize =
-      501
-    
-    ramSections =
-      2
-
-    ramRanges =
-      Array.fromList [ (0, 255)
-      , (256, 500)
-      ]
+      case Array.get 0 defaultPrograms of
+        Just program ->
+          Array.length program.layout
+        
+        Nothing -> -- impossible
+          0
   in
+  updateLayout
   { computer =
     { a = 0
     , d = 0
@@ -271,17 +301,17 @@ defaultModel =
   , isRunningComputer =
     False
   , ramSections =
-    ramSections
+    0
   , ramRanges =
-    ramRanges
+    Array.empty
   , ramDisplayRanges =
-    ramRanges
+    Array.empty
   , ramScrolls =
     Array.initialize 2 <| (\index -> InfiniteScroll.init <| showMoreRamCmd index)
   , editingRamIndices =
     Array.fromList [ Nothing, Nothing ]
   , ramDisplaySize =
-    ramDisplaySize
+    0
   , romScroll =
     InfiniteScroll.init loadMoreRom
   , romDisplaySize =
@@ -289,6 +319,13 @@ defaultModel =
   , isAnimated =
     True
   }
+
+
+defaultLayout : Layout
+defaultLayout =
+  Array.fromList
+    [ (0, 256)
+    ]
 
 
 defaultPrograms : Array AsmProgram
@@ -350,7 +387,13 @@ M=D
     0;JMP
   @LOOP
   0;JMP
-"""  }
+"""
+  , layout =
+    Array.fromList
+    [ (0, 256)
+    , (65536, 84736)
+    ]
+  }
   , { name =
     "addTwoNumbers"
     , content =
@@ -363,7 +406,9 @@ D=D+A
 @R0
 M=D
 """
-    }
+  , layout =
+    defaultLayout
+  }
   , { name =
     "drawRectangle"
     , content =
@@ -417,6 +462,8 @@ M=D
     @INFINITE_LOOP
     0;JMP
 """
+  , layout =
+    defaultLayout
   }
   ]
 
@@ -437,6 +484,37 @@ init savedModelString =
       (m, Cmd.none)
     )
     model
+
+
+updateLayout : Model -> Model
+updateLayout  model =
+  let
+    ramRanges =
+      .layout <| getActiveProgram model
+
+    ramDisplayRanges =
+      Array.map
+        (\(start, end) ->
+          (start, min (start + 256) end)
+        )
+        ramRanges
+    
+    ramDisplaySize =
+      getMaxRangeIndex ramRanges
+    
+    ramSections =
+      Array.length ramRanges
+  in
+  { model
+    | ramRanges =
+      ramRanges
+    , ramDisplayRanges =
+      ramDisplayRanges
+    , ramDisplaySize =
+      ramDisplaySize
+    , ramSections =
+      ramSections
+  }
 
 
 loadMoreRam : Int -> Model -> Model
@@ -1085,7 +1163,7 @@ editRamRange f ramIndex cellIndexStr model =
             unzipArray <|
             Array.Extra.update
             ramIndex
-            (\((start, end), (_, displayEnd)) ->
+            (\((start, end), _) ->
               let
                 (newStart, newEnd) =
                   f (\_ -> newCellIndex) (start, end)
@@ -1094,10 +1172,7 @@ editRamRange f ramIndex cellIndexStr model =
                   newStart
                 
                 newDisplayEnd =
-                  if displayEnd > newStart then
-                    min displayEnd newEnd
-                  else
-                    min (newStart + 256) newEnd
+                  min (newStart + 256) newEnd
               in
               ((newStart, newEnd), (newDisplayStart, newDisplayEnd))
             ) <|
@@ -1112,19 +1187,7 @@ editRamRange f ramIndex cellIndexStr model =
             }
 
           maxCellIndex =
-            Array.foldl
-              (\range maxIndex ->
-                let
-                  currentMaxIndex =
-                    max (Tuple.first range) (Tuple.second range)
-                in
-                if currentMaxIndex > maxIndex then
-                  currentMaxIndex
-                else
-                  maxIndex
-              )
-              0
-              newModel.ramRanges
+            getMaxRangeIndex newModel.ramRanges
         in
         ( if maxCellIndex >= newModel.ramDisplaySize then
             loadMoreRam (maxCellIndex + 1) newModel
@@ -1137,6 +1200,23 @@ editRamRange f ramIndex cellIndexStr model =
       ( model
       , Cmd.none
       )
+
+
+getMaxRangeIndex : Layout -> Int
+getMaxRangeIndex layout =
+  Array.foldl
+    (\range maxIndex ->
+      let
+        currentMaxIndex =
+          max (Tuple.first range) (Tuple.second range)
+      in
+      if currentMaxIndex > maxIndex then
+        currentMaxIndex
+      else
+        maxIndex
+    )
+    0
+    layout
 
 
 removeProgram : Int -> Model -> (Model, Cmd Msg)
@@ -1162,6 +1242,8 @@ addProgram model =
         "Untitled"
       , content =
         "{- Replace with your assembly code -}\n@0\nD=A"
+      , layout =
+        defaultLayout
       }
   in
   compileProgram
@@ -1242,7 +1324,7 @@ setActiveProgramIndex newIndex model =
     (\_ m ->
       (m, Cmd.none)
     )
-    { model
+    <| updateLayout { model
       | activeProgramIndex =
         newIndex
     }
@@ -1455,7 +1537,7 @@ startEditingProgram model =
 
 getActiveProgram : Model -> AsmProgram
 getActiveProgram model =
-  Maybe.withDefault { name = "IMPOSSIBLE", content = "IMPOSSIBLE"} <| -- impossible
+  Maybe.withDefault { name = "IMPOSSIBLE", content = "IMPOSSIBLE", layout = defaultLayout } <| -- impossible
   Array.get model.activeProgramIndex model.programs
 
 
