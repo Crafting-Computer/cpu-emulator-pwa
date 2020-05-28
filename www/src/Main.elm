@@ -53,6 +53,8 @@ type alias Model =
   , isRunningComputer : Bool
   , ramSections : Int
   , ramRanges : Array Range
+  , ramDisplayRanges : Array Range
+  , ramScrolls : Array (InfiniteScroll.Model Msg)
   , editingRamIndices : Array (Maybe Int)
   , ramDisplaySize : Int
   , romScroll : InfiniteScroll.Model Msg
@@ -80,7 +82,10 @@ type Msg
   | StartEditingRam Int Int
   | EditRam Int String
   | StopEditingRam Int Int
-  | LoadedMoreRam
+  | EditRamRangeStart Int String
+  | EditRamRangeEnd Int String
+  | ShowMoreRam Int
+  | RamScrollMsg Int InfiniteScroll.Msg
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
   | SaveModel
@@ -224,7 +229,7 @@ romSize = 2 ^ 16
 
 
 ramSize : Int
-ramSize = 2 ^ 17
+ramSize = 2 ^ 16 + 19200
 
 
 defaultModel : Model
@@ -232,6 +237,14 @@ defaultModel =
   let
     ramDisplaySize =
       501
+    
+    ramSections =
+      2
+
+    ramRanges =
+      Array.fromList [ (0, 255)
+      , (256, 500)
+      ]
   in
   { computer =
     { a = 0
@@ -256,11 +269,13 @@ defaultModel =
   , isRunningComputer =
     False
   , ramSections =
-    2
+    ramSections
   , ramRanges =
-    Array.fromList [ (0, 256)
-    , (256, 501)
-    ]
+    ramRanges
+  , ramDisplayRanges =
+    ramRanges
+  , ramScrolls =
+    Array.initialize 2 <| (\index -> InfiniteScroll.init <| showMoreRamCmd index)
   , editingRamIndices =
     Array.fromList [ Nothing, Nothing ]
   , ramDisplaySize =
@@ -422,14 +437,41 @@ init savedModelString =
     model
 
 
-loadMoreRam : InfiniteScroll.Direction -> Cmd Msg
-loadMoreRam _ =
-  msgToCmd LoadedMoreRam
+loadMoreRam : Int -> Model -> Model
+loadMoreRam nextRamDisplaySize model =
+  let
+    oldComputer =
+      model.computer
+    
+    ramSizeDifference =
+      nextRamDisplaySize - Array.length model.computer.ram
+
+    nextRam =
+      if ramSizeDifference > 0 then
+        Array.append
+          model.computer.ram
+          (Array.repeat ramSizeDifference 0)
+      else
+        model.computer.ram
+  in
+  { model
+    | ramDisplaySize = nextRamDisplaySize
+    , computer =
+      { oldComputer
+        | ram =
+          nextRam
+      }
+  }
 
 
 loadMoreRom : InfiniteScroll.Direction -> Cmd Msg
 loadMoreRom _ =
   msgToCmd LoadedMoreRom
+
+
+showMoreRamCmd : Int -> InfiniteScroll.Direction -> Cmd Msg
+showMoreRamCmd ramIndex _ =
+  msgToCmd <| ShowMoreRam ramIndex
 
 
 msgToCmd : msg -> Cmd msg
@@ -617,7 +659,7 @@ viewRom model =
       Array.toList <| Array.slice 0 model.romDisplaySize model.instructions
   in
   E.column
-    [ E.width <| E.px 200
+    [ E.width <| E.px 210
     ] <|
     [ E.text "ROM"
     , indexedTable
@@ -629,11 +671,11 @@ viewRom model =
       { data = instructionData
       , columns =
           [ { header = E.none
-            , width = E.px 50
+            , width = E.px 60
             , view =
               \index _ ->
                 E.el
-                [] <|
+                [ Font.letterSpacing -0.5 ] <|
                 E.text <| String.fromInt index
           }
           , { header = E.none
@@ -686,30 +728,59 @@ viewRam model ramIndex =
   let
     (startCellIndex, endCellIndex) =
       Maybe.withDefault (0, 0) <| Array.get ramIndex model.ramRanges
+    
+    (startDisplayCellIndex, endDisplayCellIndex) =
+      Maybe.withDefault (0, 0) <| Array.get ramIndex model.ramDisplayRanges
 
     editingRamIndex =
       Maybe.withDefault Nothing <| Array.get ramIndex model.editingRamIndices
     
     memoryData =
-      Array.toList <| Array.slice startCellIndex endCellIndex model.computer.ram
+      Array.toList <| Array.slice startDisplayCellIndex (endDisplayCellIndex + 1) model.computer.ram
   in
   E.column
-    [ E.width <| E.px 200
+    [ E.width <| E.px 210
     ] <|
-    [ E.text <| "RAM (" ++ String.fromInt startCellIndex ++ "-" ++ String.fromInt (endCellIndex - 1) ++ ")"
+    [ E.row[]
+      [ E.text <| "RAM "
+      , Input.text
+        [ E.padding 0 ]
+        { text =
+          String.fromInt startCellIndex
+        , onChange =
+          EditRamRangeStart ramIndex
+        , placeholder =
+          Nothing
+        , label =
+          Input.labelHidden "RAM range start"
+        }
+      , E.text <| "-"
+      , Input.text
+        [ E.padding 0 ]
+        { text =
+          String.fromInt endCellIndex
+        , onChange =
+          EditRamRangeEnd ramIndex
+        , placeholder =
+          Nothing
+        , label =
+          Input.labelHidden "RAM range end"
+        }
+      ]
     , indexedTable
-      [ E.htmlAttribute <| Html.Attributes.style "height" "640px"
+      [ E.htmlAttribute <| InfiniteScroll.infiniteScroll <| RamScrollMsg ramIndex
+      , E.htmlAttribute <| Html.Attributes.style "height" "640px"
       , E.htmlAttribute <| Html.Attributes.style "overflow-y" "auto"
       ]
       startCellIndex
       { data = memoryData
       , columns =
           [ { header = E.none
-            , width = E.px 50
+            , width = E.px 60
             , view =
               \index _ ->
                 E.el
-                [] <|
+                [ Font.letterSpacing -0.5 ] <|
                 E.text <| String.fromInt index
           }
           , { header = E.none
@@ -916,35 +987,26 @@ update msg model =
     StopEditingRam ramIndex cellIndex ->
       stopEditingRam ramIndex cellIndex model
 
-    LoadedMoreRam ->
+    EditRamRangeStart ramIndex cellIndexStr ->
+      editRamRangeStart ramIndex cellIndexStr model
+    
+    EditRamRangeEnd ramIndex cellIndexStr ->
+      editRamRangeEnd ramIndex cellIndexStr model
+
+    RamScrollMsg ramIndex scrollMsg ->
       let
-        oldComputer =
-          model.computer
-        
-        nextRamDisplaySize =
-          model.ramDisplaySize + 200
-
-        ramSizeDifference =
-          nextRamDisplaySize - Array.length model.computer.ram
-
-        nextRam =
-          if ramSizeDifference > 0 then
-            Array.append
-              model.computer.ram
-              (Array.repeat ramSizeDifference 0)
-          else
-            model.computer.ram
+        ( nextRamScroll, cmd ) =
+          case Array.get ramIndex model.ramScrolls of
+            Just ramScroll ->
+              InfiniteScroll.update (RamScrollMsg ramIndex) scrollMsg ramScroll
+            
+            Nothing ->
+              (InfiniteScroll.init <| showMoreRamCmd 0, Cmd.none) -- impossible
       in
-      ( { model
-        | ramDisplaySize = nextRamDisplaySize
-        , computer =
-          { oldComputer
-            | ram =
-              nextRam
-          }
-      }
-      , Cmd.none
-      )
+      ( { model | ramScrolls = Array.set ramIndex nextRamScroll model.ramScrolls }, cmd )
+
+    ShowMoreRam ramIndex ->
+      showMoreRam ramIndex model
 
     RomScrollMsg scrollMsg ->
       let
@@ -967,6 +1029,110 @@ update msg model =
 
     NoOp ->
       (model, Cmd.none)
+
+
+showMoreRam : Int -> Model -> (Model, Cmd Msg)
+showMoreRam ramIndex model =
+  let
+    nextRamScrolls =
+      Array.Extra.update ramIndex InfiniteScroll.stopLoading model.ramScrolls
+    
+    (_, nextRamDisplayRanges) =
+      unzipArray <|
+      Array.Extra.update
+      ramIndex
+      (\((start, end), (displayStart, displayEnd)) ->
+        let
+          delta =
+            (end - start) // 10
+          
+          nextDisplayEnd =
+            if displayEnd + delta > end then
+              end
+            else
+              displayEnd + delta
+        in
+        ((start, end), (displayStart, nextDisplayEnd))
+      ) <| Array.Extra.zip model.ramRanges model.ramDisplayRanges
+  in
+  ( { model | ramScrolls = nextRamScrolls, ramDisplayRanges = nextRamDisplayRanges }, Cmd.none )
+
+
+editRamRangeStart : Int -> String -> Model -> (Model, Cmd Msg)
+editRamRangeStart ramIndex cellIndexStr model =
+  editRamRange Tuple.mapFirst ramIndex cellIndexStr model
+
+
+editRamRangeEnd : Int -> String -> Model -> (Model, Cmd Msg)
+editRamRangeEnd ramIndex cellIndexStr model =
+  editRamRange Tuple.mapSecond ramIndex cellIndexStr model
+
+
+editRamRange : ((Int -> Int) -> Range -> Range)
+ -> Int -> String -> Model -> (Model, Cmd Msg)
+editRamRange f ramIndex cellIndexStr model =
+  case String.toInt cellIndexStr of
+    Just newCellIndex ->
+      if newCellIndex > ramSize then
+        (model, Cmd.none)  
+      else
+        let
+          (newRamRanges, newRamDisplayRanges) =
+            unzipArray <|
+            Array.Extra.update
+            ramIndex
+            (\((start, end), (_, displayEnd)) ->
+              let
+                (newStart, newEnd) =
+                  f (\_ -> newCellIndex) (start, end)
+                
+                newDisplayStart =
+                  newStart
+                
+                newDisplayEnd =
+                  if displayEnd > newStart then
+                    min displayEnd newEnd
+                  else
+                    min (newStart + 256) newEnd
+              in
+              ((newStart, newEnd), (newDisplayStart, newDisplayEnd))
+            ) <|
+            Array.Extra.zip model.ramRanges model.ramDisplayRanges
+          
+          newModel =
+            { model
+              | ramRanges =
+                newRamRanges
+              , ramDisplayRanges =
+                newRamDisplayRanges
+            }
+
+          maxCellIndex =
+            Array.foldl
+              (\range maxIndex ->
+                let
+                  currentMaxIndex =
+                    max (Tuple.first range) (Tuple.second range)
+                in
+                if currentMaxIndex > maxIndex then
+                  currentMaxIndex
+                else
+                  maxIndex
+              )
+              0
+              newModel.ramRanges
+        in
+        ( if maxCellIndex >= newModel.ramDisplaySize then
+            loadMoreRam (maxCellIndex + 1) newModel
+          else
+            newModel
+        , Cmd.none
+        )
+    
+    Nothing ->
+      ( model
+      , Cmd.none
+      )
 
 
 removeProgram : Int -> Model -> (Model, Cmd Msg)
@@ -1340,3 +1506,12 @@ onClickNoProp msg =
     , preventDefault = False
     }
   )
+
+unzipArray : Array (a, b) -> (Array a, Array b)
+unzipArray arr =
+  Array.foldl
+    (\(a, b) (arrA, arrB) ->
+      (Array.push a arrA, Array.push b arrB)
+    )
+    (Array.empty, Array.empty)
+    arr

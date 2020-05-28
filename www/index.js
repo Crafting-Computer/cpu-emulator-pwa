@@ -149,7 +149,7 @@ app.ports.scrollIntoViewPort.subscribe(function(ids) {
     var element = document.getElementById(id);
     if (element !== null) {
       setTimeout(function() {
-        element.scrollIntoView({block: "nearest"});
+        element.scrollIntoView({behavior: "auto", block: "nearest"});
       }, 100);
     }
   });
