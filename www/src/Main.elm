@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Array.Extra
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Browser
 import Browser.Dom
 import Browser.Events
@@ -70,6 +71,7 @@ type Msg
   | HideProgramList
   | SetActiveProgramIndex Int
   | AddProgram
+  | RemoveProgram Int
   | StartEditingProgram
   | EditProgram String
   | StopEditingProgram
@@ -383,7 +385,22 @@ viewProgramList model =
             if index /= model.activeProgramIndex then
               Input.button
                 ( styles.button
-                ++ [ E.width <| E.px 300 ]
+                ++ [ E.width <| E.px 300
+                  , E.onRight <|
+                    Input.button
+                    [ E.htmlAttribute <| Html.Attributes.style "right" "25px"
+                    , E.centerY
+                    , E.htmlAttribute <| onClickNoProp <| RemoveProgram index
+                    ]
+                    { onPress =
+                      Nothing
+                    , label =
+                      E.html
+                        (FeatherIcons.x |>
+                          FeatherIcons.toHtml []
+                        )
+                    }
+                ]
                 )
                 { onPress =
                   Just <| SetActiveProgramIndex index
@@ -748,6 +765,9 @@ update msg model =
     AddProgram ->
       addProgram model
 
+    RemoveProgram index ->
+      removeProgram index model
+
     StartEditingProgram ->
       startEditingProgram model
 
@@ -812,6 +832,21 @@ update msg model =
 
     NoOp ->
       (model, Cmd.none)
+
+
+removeProgram : Int -> Model -> (Model, Cmd Msg)
+removeProgram index model =
+  ({ model
+    | programs =
+      Array.Extra.removeAt index model.programs
+    , activeProgramIndex =
+      if index > model.activeProgramIndex then
+        model.activeProgramIndex
+      else
+        model.activeProgramIndex - 1
+  }
+  , Cmd.none
+  )
 
 
 addProgram : Model -> (Model, Cmd Msg)
@@ -1148,3 +1183,13 @@ storeToMemory : Int -> Int -> Memory -> Memory
 storeToMemory address value memory =
   Array.set address value memory
 
+
+onClickNoProp : Msg -> Html.Attribute Msg
+onClickNoProp msg =
+  Html.Events.custom "click"
+    (Decode.succeed
+    { message = msg
+    , stopPropagation = True
+    , preventDefault = False
+    }
+  )
