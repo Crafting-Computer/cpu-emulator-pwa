@@ -333,7 +333,75 @@ M=D
     0;JMP
   @LOOP
   0;JMP
-"""  }]
+"""  }
+  , { name =
+    "addTwoNumbers"
+    , content =
+      """-- Computes R0 = 2 + 3  (R0 refers to RAM[0])
+
+@2
+D=A
+@3
+D=D+A
+@R0
+M=D
+"""
+    }
+  , { name =
+    "drawRectangle"
+    , content =
+    """-- Draws a rectangle at the top-left corner of the screen.
+-- The rectangle is (R0 * 4) pixels wide and R1 pixels high.
+
+-- if width is 0 goto infinite loop
+@R0
+D=M
+@INFINITE_LOOP
+D;JLE
+-- if height is 0 goto infinite loop
+@R1
+D=M
+@INFINITE_LOOP
+D;JLE
+@height
+M=D
+@SCREEN
+D=A
+@address
+M=D
+(LOOP_HEIGHT)
+    @R0
+    D=M
+    @width
+    M=D
+    
+    (LOOP_WIDTH)
+        @address
+        A=M
+        M=0
+        @address
+        M=M+1
+        @width
+        MD=M-1
+        @LOOP_WIDTH
+        D;JGT
+
+    @80 -- screen width in # of registers
+    D=A
+    @R0 -- rectangle width
+    D=D-M
+    @address
+    M=D+M
+    @height
+    MD=M-1
+    @LOOP_HEIGHT
+    D;JGT
+(INFINITE_LOOP)
+    @INFINITE_LOOP
+    0;JMP
+"""
+  }
+  ]
 
 
 init : Maybe String -> (Model, Cmd Msg)
