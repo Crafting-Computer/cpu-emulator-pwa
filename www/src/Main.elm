@@ -203,7 +203,9 @@ type alias Memory =
 
 
 colors =
-  { lightGreen =
+  { white =
+    E.rgb255 255 255 255
+  , lightGreen =
     E.rgb255 102 255 102
   , lightGrey =
     E.rgb255 220 220 220
@@ -502,6 +504,7 @@ view model =
       [ E.column
         [ E.spacing 20
         , E.alignTop
+        , Background.color colors.white
         ]
         [ E.row
           [ E.spacing 20 ] <|
@@ -550,7 +553,7 @@ viewProgramList model =
   let
     programList =
       E.column
-        [] <|
+        [ E.alignRight ] <|
         Array.Extra.indexedMapToList
           (\index program ->
             if index /= model.activeProgramIndex then
@@ -660,6 +663,7 @@ viewRom model =
   in
   E.column
     [ E.width <| E.px 210
+    , Background.color colors.white
     ] <|
     [ E.text "ROM"
     , indexedTable
