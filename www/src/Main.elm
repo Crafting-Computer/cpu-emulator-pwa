@@ -2,9 +2,6 @@ port module Main exposing (main)
 
 
 import Array exposing (Array)
-import Binary
-import Bitwise
-import List.Extra
 import Html exposing (Html)
 import Html.Attributes
 import Browser
@@ -41,13 +38,14 @@ port resetComputerPort : () -> Cmd msg
 type alias Model =
   { computer : Computer
   , editingInstructionIndex : Maybe Int
-  , editingRamIndex : Maybe Int
+  , editingRamIndices : Array (Maybe Int)
   , assemblerError : Maybe String
   , isEditingProgram : Bool
   , program : String
   , instructions : Array String
   , isRunningComputer : Bool
-  , ramScroll : InfiniteScroll.Model Msg
+  , ramSections : Int
+  , ramRanges : Array Range
   , ramDisplaySize : Int
   , romScroll : InfiniteScroll.Model Msg
   , romDisplaySize : Int
@@ -65,10 +63,9 @@ type Msg
   | StartEditingProgram
   | EditProgram String
   | StopEditingProgram
-  | StartEditingRam Int
+  | StartEditingRam Int Int
   | EditRam Int String
-  | StopEditingRam Int
-  | RamScrollMsg InfiniteScroll.Msg
+  | StopEditingRam Int Int
   | LoadedMoreRam
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
@@ -93,6 +90,10 @@ type alias Computer =
   , ram : Array Int
   , rom : Array Int
   }
+
+
+type alias Range =
+  (Int, Int)
 
 
 encodeComputer : Computer -> Encode.Value
@@ -160,7 +161,7 @@ init : () -> (Model, Cmd Msg)
 init _ =
   let
     ramDisplaySize =
-      50
+      501
   in
   ( { computer =
     { a = 0
@@ -172,8 +173,8 @@ init _ =
     }
   , editingInstructionIndex =
     Nothing
-  , editingRamIndex =
-    Nothing
+  , editingRamIndices =
+    Array.fromList [ Nothing, Nothing ]
   , assemblerError =
     Nothing
   , isEditingProgram =
@@ -184,8 +185,12 @@ init _ =
     Array.repeat romSize ""
   , isRunningComputer =
     False
-  , ramScroll =
-    InfiniteScroll.init loadMoreRam
+  , ramSections =
+    2
+  , ramRanges =
+    Array.fromList [ (0, 256)
+    , (256, 501)
+    ]
   , ramDisplaySize =
     ramDisplaySize
   , romScroll =
@@ -238,7 +243,11 @@ view model =
         [ E.spacing 20
         , E.alignTop
         ]
-        [ viewRam model
+        [ E.row
+          [ E.spacing 20 ] <|
+          List.map
+          (viewRam model)
+          (List.range 0 (model.ramSections - 1))
         , E.column
           [ E.width E.fill
           , E.spacing 10
@@ -308,6 +317,7 @@ viewRom model =
       , E.htmlAttribute <| Html.Attributes.style "height" "640px"
       , E.htmlAttribute <| Html.Attributes.style "overflow-y" "auto"
       ]
+      0
       { data = instructionData
       , columns =
           [ { header = E.none
@@ -363,21 +373,27 @@ viewRegister name value isAnimated =
   )
 
 
-viewRam : Model -> E.Element Msg
-viewRam model =
+viewRam : Model -> Int -> E.Element Msg
+viewRam model ramIndex =
   let
+    (startCellIndex, endCellIndex) =
+      Maybe.withDefault (0, 0) <| Array.get ramIndex model.ramRanges
+
+    editingRamIndex =
+      Maybe.withDefault Nothing <| Array.get ramIndex model.editingRamIndices
+    
     memoryData =
-      Array.toList <| Array.slice 0 model.ramDisplaySize model.computer.ram
+      Array.toList <| Array.slice startCellIndex endCellIndex model.computer.ram
   in
   E.column
     [ E.width <| E.px 200
     ] <|
-    [ E.text "RAM"
+    [ E.text <| "RAM (" ++ String.fromInt startCellIndex ++ "-" ++ String.fromInt (endCellIndex - 1) ++ ")"
     , indexedTable
-      [ E.htmlAttribute <| InfiniteScroll.infiniteScroll RamScrollMsg
-      , E.htmlAttribute <| Html.Attributes.style "height" "640px"
+      [ E.htmlAttribute <| Html.Attributes.style "height" "640px"
       , E.htmlAttribute <| Html.Attributes.style "overflow-y" "auto"
       ]
+      startCellIndex
       { data = memoryData
       , columns =
           [ { header = E.none
@@ -391,7 +407,7 @@ viewRam model =
           , { header = E.none
             , width = E.fill
             , view =
-                \index cell ->
+                \cellIndex cell ->
                   let
                     commonStyle =
                       [ E.paddingXY 10 0
@@ -401,7 +417,7 @@ viewRam model =
                       ]
                     
                     cellStyle =
-                      if index == 0 then
+                      if cellIndex == 0 then
                         commonStyle
                         ++ [ Background.color colors.lightGreen
                         ]
@@ -409,23 +425,23 @@ viewRam model =
                         commonStyle
 
                     isEditing =
-                      case model.editingRamIndex of
+                      case editingRamIndex of
                         Nothing ->
                           False
                         
                         Just editingIndex ->
-                          index == editingIndex
+                          cellIndex == editingIndex
                   in
                   E.el cellStyle <|
                   if isEditing then
                     Input.text
                       (cellStyle
-                      ++ [ Events.onLoseFocus <| StopEditingRam index
-                        , E.htmlAttribute <| Html.Attributes.id <| "ram" ++ String.fromInt index
+                      ++ [ Events.onLoseFocus <| StopEditingRam ramIndex cellIndex
+                        , E.htmlAttribute <| Html.Attributes.id <| getRamCellId ramIndex cellIndex
                         , E.width E.fill
                       ])
                       { onChange =
-                        EditRam index
+                        EditRam cellIndex
                       , text =
                         String.fromInt cell
                       , placeholder =
@@ -435,7 +451,7 @@ viewRam model =
                       }
                   else
                     E.el
-                    [ Events.onClick <| StartEditingRam index
+                    [ Events.onClick <| StartEditingRam ramIndex cellIndex
                     , E.width E.fill
                     ] <|
                     E.text <|
@@ -451,10 +467,11 @@ viewRam model =
 
 indexedTable :
   List (E.Attribute Msg) ->
+  Int ->
   { data : List record
   , columns : List (E.IndexedColumn record Msg)
   } -> E.Element Msg
-indexedTable attributes { data, columns } =
+indexedTable attributes startIndex { data, columns } =
   E.column
   ( attributes
     ++ [ E.width E.fill ]
@@ -467,7 +484,7 @@ indexedTable attributes { data, columns } =
         E.el
         [ E.width <| column.width
         ] <|
-        column.view index cell
+        column.view (index +startIndex) cell
       )
       columns
     )
@@ -563,29 +580,19 @@ update msg model =
     StopEditingProgram ->
       stopEditingProgram model
 
-    StartEditingRam index ->
-      startEditingRam index model
+    StartEditingRam ramIndex cellIndex ->
+      startEditingRam ramIndex cellIndex model
     
     EditRam index newValue->
       editRam index newValue model
     
-    StopEditingRam index ->
-      stopEditingRam index model
-
-    RamScrollMsg scrollMsg ->
-      let
-        ( nextRamScroll, cmd ) =
-          InfiniteScroll.update RamScrollMsg scrollMsg model.ramScroll
-      in
-      ( { model | ramScroll = nextRamScroll }, cmd )
+    StopEditingRam ramIndex cellIndex ->
+      stopEditingRam ramIndex cellIndex model
 
     LoadedMoreRam ->
       let
         oldComputer =
           model.computer
-        
-        nextRamScroll =
-          InfiniteScroll.stopLoading model.ramScroll
         
         nextRamDisplaySize =
           model.ramDisplaySize + 200
@@ -602,8 +609,7 @@ update msg model =
             model.computer.ram
       in
       ( { model
-        | ramScroll = nextRamScroll
-        , ramDisplaySize = nextRamDisplaySize
+        | ramDisplaySize = nextRamDisplaySize
         , computer =
           { oldComputer
             | ram =
@@ -726,14 +732,19 @@ stopRunningComputer model =
   )
 
 
-startEditingRam : Int -> Model -> (Model, Cmd Msg)
-startEditingRam index model =
+startEditingRam : Int -> Int -> Model -> (Model, Cmd Msg)
+startEditingRam ramIndex cellIndex model =
   ({ model
-    | editingRamIndex =
-      Just index
+    | editingRamIndices =
+      Array.set ramIndex (Just cellIndex) model.editingRamIndices
   }
-  , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus <| "ram" ++ String.fromInt index
+  , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus <| getRamCellId ramIndex cellIndex
   )
+
+
+getRamCellId : Int -> Int -> String
+getRamCellId ramIndex cellIndex =
+  "ram-" ++ String.fromInt ramIndex ++ "-" ++ String.fromInt cellIndex
 
 
 editRam : Int -> String -> Model -> (Model, Cmd Msg)
@@ -756,13 +767,13 @@ editRam index newValueStr model =
   )
 
 
-stopEditingRam : Int -> Model -> (Model, Cmd Msg)
-stopEditingRam index model =
+stopEditingRam : Int -> Int -> Model -> (Model, Cmd Msg)
+stopEditingRam ramIndex cellIndex model =
   ({ model
-    | editingRamIndex =
-      Nothing
+    | editingRamIndices =
+      Array.set ramIndex Nothing model.editingRamIndices
   }
-  , Cmd.none
+  , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus <| getRamCellId ramIndex cellIndex
   )
 
 
