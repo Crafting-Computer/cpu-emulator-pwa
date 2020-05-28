@@ -22,6 +22,7 @@ import InfiniteScroll
 import Json.Encode as Encode
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Field as Field
+import Time
 
 
 port showProgramEditorPort : () -> Cmd msg
@@ -38,6 +39,7 @@ port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
 port resetComputerPort : Int -> Cmd msg
+port saveModelPort : Encode.Value -> Cmd msg
 
 
 type alias Model =
@@ -81,10 +83,11 @@ type Msg
   | LoadedMoreRam
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
+  | SaveModel
   | NoOp
 
 
-main : Program () Model Msg
+main : Program (Maybe String) Model Msg
 main =
   Browser.element
     { init = init
@@ -114,6 +117,53 @@ type alias AsmProgram =
   }
 
 
+encodeModel : Model -> Encode.Value
+encodeModel model =
+  Encode.object
+    [ ("programs", Encode.array encodeProgram model.programs)
+    , ("activeProgramIndex", Encode.int model.activeProgramIndex)
+    , ("computer", encodeComputer model.computer)
+    ]
+
+
+encodeProgram : AsmProgram -> Encode.Value
+encodeProgram program =
+  Encode.object
+    [ ("name", Encode.string program.name)
+    , ("content", Encode.string program.content)
+    ]
+
+
+decodeProgram : Decoder AsmProgram
+decodeProgram =
+  Field.require "name" Decode.string <| \name ->
+  Field.require "content" Decode.string <| \content ->
+
+  Decode.succeed
+    { name =
+      name
+    , content =
+      content
+    }
+
+
+decodeModel : Decoder Model
+decodeModel =
+  Field.require "programs" (Decode.array decodeProgram) <| \programs ->
+  Field.require "activeProgramIndex" Decode.int <| \activeProgramIndex ->
+  Field.require "computer" decodeComputer <| \computer ->
+
+  Decode.succeed
+    { defaultModel
+      | computer =
+        computer
+      , programs =
+        programs
+      , activeProgramIndex =
+        activeProgramIndex
+    }
+
+
 encodeComputer : Computer -> Encode.Value
 encodeComputer computer =
   Encode.object
@@ -122,7 +172,6 @@ encodeComputer computer =
     , ("m", Encode.int computer.m)
     , ("pc", Encode.int computer.pc)
     , ("ram", Encode.array Encode.int computer.ram)
-    , ("rom", Encode.array Encode.int computer.rom)
     ]
 
 
@@ -142,6 +191,7 @@ decodeComputer =
     , ram = ram
     , rom = Array.empty
     }
+
 
 type alias Memory =
   Array Int
@@ -172,19 +222,63 @@ styles =
 romSize : Int
 romSize = 2 ^ 16
 
+
 ramSize : Int
 ramSize = 2 ^ 17
 
-init : () -> (Model, Cmd Msg)
-init _ =
+
+defaultModel : Model
+defaultModel =
   let
     ramDisplaySize =
       501
-    
-    programs =
-      [ { name = "FillScreenOnKeyPress"
-      , content =
-        """-- Runs an infinite loop that listens to the keyboard input.
+  in
+  { computer =
+    { a = 0
+    , d = 0
+    , m = 0
+    , pc = 0
+    , rom = Array.repeat romSize 0
+    , ram = Array.repeat ramDisplaySize 0
+    }
+  , programs =
+    defaultPrograms
+  , activeProgramIndex =
+    0
+  , assemblerError =
+    Nothing
+  , showProgramList =
+    False
+  , isEditingProgram =
+    False
+  , instructions =
+    Array.repeat romSize ""
+  , isRunningComputer =
+    False
+  , ramSections =
+    2
+  , ramRanges =
+    Array.fromList [ (0, 256)
+    , (256, 501)
+    ]
+  , editingRamIndices =
+    Array.fromList [ Nothing, Nothing ]
+  , ramDisplaySize =
+    ramDisplaySize
+  , romScroll =
+    InfiniteScroll.init loadMoreRom
+  , romDisplaySize =
+    50
+  , isAnimated =
+    True
+  }
+
+
+defaultPrograms : Array AsmProgram
+defaultPrograms =
+  Array.fromList [ { name = "FillScreenOnKeyPress"
+  , content =
+    """-- Runs an infinite loop that listens to the keyboard input.
 -- When a key is pressed (any key), the program blackens the screen,
 -- i.e. writes "black" in every pixel;
 -- the screen should remain fully black as long as the key is pressed. 
@@ -239,58 +333,25 @@ M=D
     0;JMP
   @LOOP
   0;JMP
-"""
-      }
-      ]
-    
-    (model, cmd) =
-      compileProgram
-      (\_ m ->
-        (m, Cmd.none)
-      )
-      { computer =
-        { a = 0
-        , d = 0
-        , m = 0
-        , pc = 0
-        , rom = Array.repeat romSize 0
-        , ram = Array.repeat ramDisplaySize 0
-        }
-      , programs =
-        Array.fromList programs
-      , activeProgramIndex =
-        0
-      , assemblerError =
-        Nothing
-      , showProgramList =
-        False
-      , isEditingProgram =
-        False
-      , instructions =
-        Array.repeat romSize ""
-      , isRunningComputer =
-        False
-      , ramSections =
-        2
-      , ramRanges =
-        Array.fromList [ (0, 256)
-        , (256, 501)
-        ]
-      , editingRamIndices =
-        Array.fromList [ Nothing, Nothing ]
-      , ramDisplaySize =
-        ramDisplaySize
-      , romScroll =
-        InfiniteScroll.init loadMoreRom
-      , romDisplaySize =
-        50
-      , isAnimated =
-        True
-      }
+"""  }]
+
+
+init : Maybe String -> (Model, Cmd Msg)
+init savedModelString =
+  let
+    model =
+      case savedModelString of
+        Just str ->
+          Result.withDefault defaultModel <| Decode.decodeString decodeModel str
+        
+        Nothing ->
+          defaultModel
   in
-  ( model
-  , cmd
-  )
+  compileProgram
+    (\_ m ->
+      (m, Cmd.none)
+    )
+    model
 
 
 loadMoreRam : InfiniteScroll.Direction -> Cmd Msg
@@ -830,6 +891,11 @@ update msg model =
       in
       ( { model | romScroll = nextRomScroll, romDisplaySize = model.romDisplaySize + 200 }, Cmd.none )
 
+    SaveModel ->
+      ( model
+      , saveModelPort (encodeModel model)
+      )
+
     NoOp ->
       (model, Cmd.none)
 
@@ -1174,7 +1240,7 @@ subscriptions model =
     , if model.isRunningComputer then
       Browser.Events.onAnimationFrameDelta StepComputerOneFrame
     else
-      Sub.none
+      Time.every 2000 (\_ -> SaveModel)
     , receiveComputerPort ReceivedComputer
     ]
 

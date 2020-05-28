@@ -81,7 +81,18 @@ var editor = monaco.editor.create(document.getElementById("editor"), {
 });
 
 /////////////////////////////////// initialize elm app /////////////////////////////////////////
-var app = Elm.Main.init({ node: document.querySelector("main") });
+
+var localStorageKey = "cpu-emulator-pwa";
+
+// load saved project from localStorage
+var savedModelString = localStorage.getItem(localStorageKey);
+
+var app = Elm.Main.init({ node: document.querySelector("main"), flags: savedModelString });
+
+app.ports.saveModelPort.subscribe(function(modelJson) {
+  var modelString = JSON.stringify(modelJson);
+  localStorage.setItem(localStorageKey, modelString);
+});
 
 var screen = document.getElementById("screen").getContext('2d');
 
