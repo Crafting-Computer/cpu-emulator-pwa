@@ -1027,7 +1027,7 @@ stepComputerOneFrame time model =
       min time 1000
     
     cycles =
-      ceiling ((timeToRun / 1000) * 1000 * 1024)
+      ceiling ((timeToRun / 1000) * 700 * 1024)
   in
   ( model
   , stepComputeLite cycles
