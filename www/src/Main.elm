@@ -44,6 +44,7 @@ type alias Model =
   , programs : Array AsmProgram
   , activeProgramIndex : Int
   , assemblerError : Maybe String
+  , showProgramList : Bool
   , isEditingProgram : Bool
   , instructions : Array String
   , isRunningComputer : Bool
@@ -64,6 +65,11 @@ type Msg
   | StartRunningComputer
   | StopRunningComputer
   | ResetComputer
+  | EditProgramName String
+  | ShowProgramList
+  | HideProgramList
+  | SetActiveProgramIndex Int
+  | AddProgram
   | StartEditingProgram
   | EditProgram String
   | StopEditingProgram
@@ -235,8 +241,11 @@ M=D
       }
       ]
     
-    (model, editRomCmd) =
-      stopEditingProgram
+    (model, cmd) =
+      compileProgram
+      (\_ m ->
+        (m, Cmd.none)
+      )
       { computer =
         { a = 0
         , d = 0
@@ -251,6 +260,8 @@ M=D
         0
       , assemblerError =
         Nothing
+      , showProgramList =
+        False
       , isEditingProgram =
         False
       , instructions =
@@ -276,10 +287,7 @@ M=D
       }
   in
   ( model
-  , Cmd.batch
-    [ editProgramInEditorPort <| .content <| getActiveProgram model
-    , editRomCmd
-    ]
+  , cmd
   )
 
 
@@ -351,15 +359,90 @@ view model =
             [ viewSingleStepButton
             , viewRunButton model.isRunningComputer
             , viewResetButton
+            , viewEditButton model.computer
             ]
           , E.row
             [ E.spacing 20 ]
-            [ viewEditButton model.computer
+            [ viewProgramName model
+            , viewProgramList model
             ]
           ]
         ]
       , viewCloseEditorButton model.isEditingProgram
       ]
+
+
+viewProgramList : Model -> E.Element Msg
+viewProgramList model =
+  let
+    programList =
+      E.column
+        [] <|
+        Array.Extra.indexedMapToList
+          (\index program ->
+            if index /= model.activeProgramIndex then
+              Input.button
+                ( styles.button
+                ++ [ E.width <| E.px 300 ]
+                )
+                { onPress =
+                  Just <| SetActiveProgramIndex index
+                , label =
+                  E.paragraph []
+                    [ E.text program.name
+                    ]
+                }
+            else
+              E.none
+          )
+          model.programs
+        ++ [
+          Input.button
+          ( styles.button
+          ++ [ E.width <| E.px 300 ]
+          )
+          { onPress =
+            Just AddProgram
+          , label =
+            E.html
+            ( FeatherIcons.plus |> FeatherIcons.toHtml [] )
+          }
+        ]
+  in
+  Input.button
+    ( styles.button
+    ++ [ E.above <|
+      if model.showProgramList then
+        programList
+      else
+        E.none
+    ]
+    )
+    { onPress =
+      Just <|
+      if model.showProgramList then
+        HideProgramList
+      else
+        ShowProgramList
+    , label =
+      E.html
+      ( ( if model.showProgramList then
+        FeatherIcons.chevronUp
+      else
+        FeatherIcons.chevronDown
+      ) |> FeatherIcons.toHtml []
+      )
+    }
+
+
+viewProgramName : Model -> E.Element Msg
+viewProgramName model =
+  Input.text []
+    { onChange = EditProgramName
+    , text = .name <| getActiveProgram model
+    , placeholder = Nothing
+    , label = Input.labelHidden "program name"
+    }
 
 
 viewCloseEditorButton : Bool -> E.Element Msg
@@ -650,6 +733,21 @@ update msg model =
     ResetComputer ->
       resetComputer model
 
+    ShowProgramList ->
+      showProgramList model
+    
+    HideProgramList ->
+      hideProgramList model
+
+    SetActiveProgramIndex newIndex ->
+      setActiveProgramIndex newIndex model
+
+    EditProgramName newName ->
+      editProgramName newName model
+    
+    AddProgram ->
+      addProgram model
+
     StartEditingProgram ->
       startEditingProgram model
 
@@ -714,6 +812,129 @@ update msg model =
 
     NoOp ->
       (model, Cmd.none)
+
+
+addProgram : Model -> (Model, Cmd Msg)
+addProgram model =
+  let
+    newProgram =
+      { name =
+        "Untitled"
+      , content =
+        "{- Replace with your assembly code -}\n@0\nD=A"
+      }
+  in
+  compileProgram
+    (\_ m ->
+      ( m, Cmd.none )
+    )
+    { model
+      | programs =
+        Array.push newProgram model.programs
+      , activeProgramIndex =
+        Array.length model.programs
+    }
+
+
+compileProgram : (Bool -> Model -> (Model, Cmd Msg)) -> Model -> (Model, Cmd Msg)
+compileProgram f model =
+  case Assembler.parseProgram <| .content <| getActiveProgram model of
+    Ok instructions ->
+      let
+        oldComputer =
+          model.computer
+
+        updatedPartOfInstructions =
+          Array.fromList <|
+            List.map Assembler.instructionToString instructions
+        
+        nextInstructions =
+          Array.append
+            updatedPartOfInstructions
+            (Array.repeat (romSize - Array.length updatedPartOfInstructions) "")
+
+        updatedPartOfRom =
+          Array.fromList <|
+            Assembler.emitProgram instructions
+        
+        nextRom =
+          Array.append
+            updatedPartOfRom
+            (Array.repeat (romSize - Array.length updatedPartOfRom) 0)
+        
+        (newModel, newCmd) =
+          f
+          True
+          { model
+          | instructions =
+            nextInstructions
+          , computer =
+            { oldComputer
+              | rom =
+                nextRom
+            }
+          }
+      in
+      ( newModel
+      , Cmd.batch
+        [ editRomPort updatedPartOfRom
+        , editProgramInEditorPort <| .content <| getActiveProgram model
+        , newCmd
+        ]
+      )
+    
+    Err _ ->
+      let
+        ( newModel, newCmd ) =
+          f False model
+      in
+      ( newModel
+      , Cmd.batch
+        [ editProgramInEditorPort <| .content <| getActiveProgram model
+        , newCmd
+        ]
+      )
+
+
+setActiveProgramIndex : Int -> Model -> (Model, Cmd Msg)
+setActiveProgramIndex newIndex model =
+  compileProgram
+    (\_ m ->
+      (m, Cmd.none)
+    )
+    { model
+      | activeProgramIndex =
+        newIndex
+    }
+
+
+hideProgramList : Model -> (Model, Cmd Msg)
+hideProgramList model =
+  ({ model
+    | showProgramList =
+      False
+  }
+  , Cmd.none
+  )
+
+
+showProgramList : Model -> (Model, Cmd Msg)
+showProgramList model =
+  ({ model
+    | showProgramList =
+      True
+  }
+  , Cmd.none
+  )
+
+
+editProgramName : String -> Model -> (Model, Cmd Msg)
+editProgramName newName model =
+  ( updateActiveProgram
+    (\oldProgram -> { oldProgram | name = newName })
+    model
+  , Cmd.none
+  )
 
 
 receivedComputer : Decode.Value -> Model -> (Model, Cmd Msg)
@@ -850,27 +1071,21 @@ stopEditingRam ramIndex cellIndex model =
 editProgram : String -> Model -> (Model, Cmd Msg)
 editProgram newContent model =
   let
-    newPrograms =
-      Array.Extra.update
-      model.activeProgramIndex
+    newModel =
+      updateActiveProgram
       (\oldProgram -> { oldProgram | content = newContent })
-      model.programs
+      model
   in
   case Assembler.parseProgram newContent of
     Ok _ ->
-      ( { model
-        | programs =
-          newPrograms
-        }
+      ( newModel
       , clearAssemblerErrorPort ()
       )
 
     Err error ->
-      ( { model
-        | programs =
-          newPrograms
-        , assemblerError =
-          Just <| Tuple.second error
+      ( { newModel
+          | assemblerError =
+            Just <| Tuple.second error
         }
       , showAssemblerErrorPort error
       )
@@ -892,56 +1107,29 @@ getActiveProgram model =
   Array.get model.activeProgramIndex model.programs
 
 
+updateActiveProgram : (AsmProgram -> AsmProgram) -> Model -> Model
+updateActiveProgram f model =
+  { model
+    | programs =
+      Array.Extra.update
+      model.activeProgramIndex
+      f
+      model.programs
+  }
+
+
 stopEditingProgram : Model -> (Model, Cmd Msg)
 stopEditingProgram model =
-  case Assembler.parseProgram <| .content <| getActiveProgram model of
-    Ok instructions ->
-      let
-        oldComputer =
-          model.computer
-
-        updatedPartOfInstructions =
-          Array.fromList <|
-            List.map Assembler.instructionToString instructions
-        
-        nextInstructions =
-          Array.append
-            updatedPartOfInstructions
-            (Array.repeat (romSize - Array.length updatedPartOfInstructions) "")
-
-        updatedPartOfRom =
-          Array.fromList <|
-            Assembler.emitProgram instructions
-        
-        nextRom =
-          Array.append
-            updatedPartOfRom
-            (Array.repeat (romSize - Array.length updatedPartOfRom) 0)
-      in
-      ({ model
-        | instructions =
-          nextInstructions
-        , computer =
-          { oldComputer
-            | rom =
-              nextRom
-          }
-        , isEditingProgram =
-          False
-      }
-      , Cmd.batch
-        [ hideProgramEditorPort ()
-        , editRomPort updatedPartOfRom
-        ]
-      )
-    
-    Err _ ->
-      ({ model
+  compileProgram
+    (\_ m ->
+      ({ m
         | isEditingProgram =
           False
       }
       , hideProgramEditorPort ()
       )
+    )
+    model
 
 
 subscriptions : Model -> Sub Msg

@@ -88,11 +88,26 @@ var screen = document.getElementById("screen").getContext('2d');
 wasm.initialize();
 
 editor.onDidChangeModelContent(function(event) {
-  app.ports.editProgramPort.send(editor.getValue({ lineEnding : "\n"}));
+  app.ports.editProgramInElmPort.send(editor.getValue({ lineEnding : "\n"}));
+});
+
+app.ports.editProgramInEditorPort.subscribe(function(newContent) {
+  editor.setValue(newContent);
 });
 
 app.ports.stepComputerPort.subscribe(function([ramDisplaySize, cycles]) {
   let newComputer = wasm.step(ramDisplaySize, cycles);
+  updateScreen(newComputer.updated_pixels);
+  app.ports.receiveComputerPort.send(newComputer);
+});
+
+app.ports.stepComputeLite.subscribe(function(cycles) {
+  let updatedPixels = wasm.step_lite(cycles);
+  updateScreen(updatedPixels);
+});
+
+app.ports.askForComputerPort.subscribe(function(ramDisplaySize) {
+  let newComputer = wasm.ask_for_computer(ramDisplaySize);
   updateScreen(newComputer.updated_pixels);
   app.ports.receiveComputerPort.send(newComputer);
 });
@@ -112,8 +127,10 @@ function updateScreen(pixels) {
   });
 }
 
-app.ports.resetComputerPort.subscribe(function() {
-  wasm.reset();
+app.ports.resetComputerPort.subscribe(function(ramDisplaySize) {
+  let newComputer = wasm.reset(ramDisplaySize);
+  app.ports.receiveComputerPort.send(newComputer);
+  screen.clearRect(0, 0, screen.canvas.width, screen.canvas.height);
 });
 
 app.ports.scrollIntoViewPort.subscribe(function(id) {
