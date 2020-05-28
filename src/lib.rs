@@ -41,7 +41,7 @@ pub struct ComputerForJs {
     updated_pixels : Vec<Pixel>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Pixel {
     x : i32,
     y : i32,
@@ -98,14 +98,59 @@ pub fn edit_ram(index: usize, value: i32) {
 }
 
 #[wasm_bindgen]
-pub fn reset() {
+pub fn reset(ram_display_size: usize) -> JsValue {
     unsafe {
+    computer.a = 0;
+    computer.d = 0;
+    computer.m = 0;
     computer.pc = 0;
+    computer.ram = [0; RAM_SIZE];
+    let new_computer =
+        ComputerForJs {
+            a : computer.a,
+            d : computer.d,
+            m : computer.m,
+            pc : computer.pc,
+            ram : computer.ram[..ram_display_size].to_vec(),
+            updated_pixels : Vec::new(),
+        };
+    JsValue::from_serde(&new_computer).unwrap()
     }
 }
 
 #[wasm_bindgen]
 pub fn step(ram_display_size: usize, cycles: usize) -> JsValue {
+    unsafe {
+    let updated_pixels = step_internal(cycles);
+    let new_computer = generate_computer_for_js(ram_display_size, updated_pixels);
+    
+    JsValue::from_serde(&new_computer).unwrap()
+    }
+}
+
+fn generate_computer_for_js(ram_display_size: usize, updated_pixels: Vec<Pixel>) -> ComputerForJs {
+    unsafe {
+    ComputerForJs {
+        a : computer.a,
+        d : computer.d,
+        m : computer.m,
+        pc : computer.pc,
+        ram : computer.ram[..ram_display_size].to_vec(),
+        updated_pixels : updated_pixels,
+    }
+    }
+}
+
+#[wasm_bindgen]
+pub fn step_lite(cycles: usize) -> JsValue {
+    unsafe {
+    let updated_pixels = step_internal(cycles);
+    
+    JsValue::from_serde(&updated_pixels).unwrap()
+    }
+}
+
+pub fn step_internal(cycles: usize) -> Vec<Pixel> {
     unsafe {
     let mut updated_pixels = Vec::new();
     for _ in 0..cycles {
@@ -123,18 +168,14 @@ pub fn step(ram_display_size: usize, cycles: usize) -> JsValue {
             None => {}
         }
     }
-    let new_computer =
-        ComputerForJs {
-            a : computer.a,
-            d : computer.d,
-            m : computer.m,
-            pc : computer.pc,
-            ram : computer.ram[..ram_display_size].to_vec(),
-            updated_pixels : updated_pixels,
-        };
-    
-    JsValue::from_serde(&new_computer).unwrap()
+    updated_pixels
     }
+}
+
+#[wasm_bindgen]
+pub fn ask_for_computer(ram_display_size: usize) -> JsValue {
+    let new_computer = generate_computer_for_js(ram_display_size, Vec::new());
+    JsValue::from_serde(&new_computer).unwrap()
 }
 
 

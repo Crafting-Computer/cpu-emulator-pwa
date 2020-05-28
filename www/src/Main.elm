@@ -29,16 +29,16 @@ port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
 port scrollIntoViewPort : String -> Cmd msg
 port stepComputerPort : (Int, Int) -> Cmd msg
+port stepComputeLite : (Int) -> Cmd msg
+port askForComputerPort : Int -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
-port resetComputerPort : () -> Cmd msg
+port resetComputerPort : Int -> Cmd msg
 
 
 type alias Model =
   { computer : Computer
-  , editingInstructionIndex : Maybe Int
-  , editingRamIndices : Array (Maybe Int)
   , assemblerError : Maybe String
   , isEditingProgram : Bool
   , program : String
@@ -46,6 +46,7 @@ type alias Model =
   , isRunningComputer : Bool
   , ramSections : Int
   , ramRanges : Array Range
+  , editingRamIndices : Array (Maybe Int)
   , ramDisplaySize : Int
   , romScroll : InfiniteScroll.Model Msg
   , romDisplaySize : Int
@@ -171,10 +172,6 @@ init _ =
     , rom = Array.repeat romSize 0
     , ram = Array.repeat ramDisplaySize 0
     }
-  , editingInstructionIndex =
-    Nothing
-  , editingRamIndices =
-    Array.fromList [ Nothing, Nothing ]
   , assemblerError =
     Nothing
   , isEditingProgram =
@@ -191,6 +188,8 @@ init _ =
     Array.fromList [ (0, 256)
     , (256, 501)
     ]
+  , editingRamIndices =
+    Array.fromList [ Nothing, Nothing ]
   , ramDisplaySize =
     ramDisplaySize
   , romScroll =
@@ -657,22 +656,13 @@ receivedComputer json model =
 
 resetComputer : Model -> (Model, Cmd Msg)
 resetComputer model =
-  let
-    oldComputer =
-      model.computer
-  in
   ({ model
-    | computer =
-      { oldComputer
-        | pc =
-          0
-      }
-    , isRunningComputer =
+    | isRunningComputer =
       False
   }
   , Cmd.batch
     [ scrollIntoViewPort "instruction0"
-    , resetComputerPort ()
+    , resetComputerPort model.ramDisplaySize
     ]
   )
 
@@ -704,7 +694,7 @@ stepComputerOneFrame time model =
       ceiling ((timeToRun / 1000) * 1000 * 1024)
   in
   ( model
-  , step model.ramDisplaySize cycles
+  , stepComputeLite cycles
   )
 
 
@@ -728,7 +718,7 @@ stopRunningComputer model =
     , isAnimated =
       True
   }
-  , Cmd.none
+  , askForComputerPort model.ramDisplaySize
   )
 
 
