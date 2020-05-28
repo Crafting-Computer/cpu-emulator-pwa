@@ -104,7 +104,6 @@ pub fn reset(ram_display_size: usize) -> JsValue {
     computer.d = 0;
     computer.m = 0;
     computer.pc = 0;
-    computer.ram = [0; RAM_SIZE];
     let new_computer =
         ComputerForJs {
             a : computer.a,
