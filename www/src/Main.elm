@@ -31,7 +31,7 @@ port editProgramInElmPort : (String -> msg) -> Sub msg
 port editProgramInEditorPort : String -> Cmd msg
 port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
-port scrollIntoViewPort : String -> Cmd msg
+port scrollIntoViewPort : List String -> Cmd msg
 port stepComputerPort : (Int, Int) -> Cmd msg
 port stepComputeLite : (Int) -> Cmd msg
 port askForComputerPort : Int -> Cmd msg
@@ -646,7 +646,7 @@ viewRom model =
                       , Border.width 1
                       , E.height <| E.px 22
                       , E.width <| E.px 130
-                      , E.htmlAttribute <| Html.Attributes.id <| "instruction" ++ String.fromInt index
+                      , E.htmlAttribute <| Html.Attributes.id <| getInstructionId index
                       ]
 
                     cellStyle =
@@ -725,7 +725,7 @@ viewRam model ramIndex =
                       ]
                     
                     cellStyle =
-                      if cellIndex == 0 then
+                      if cellIndex == model.computer.a then
                         commonStyle
                         ++ [ Background.color colors.lightGreen
                         ]
@@ -761,6 +761,7 @@ viewRam model ramIndex =
                     E.el
                     [ Events.onClick <| StartEditingRam ramIndex cellIndex
                     , E.width E.fill
+                    , E.htmlAttribute <| Html.Attributes.id <| getRamCellId ramIndex cellIndex
                     ] <|
                     E.text <|
                     if model.isAnimated then
@@ -1131,7 +1132,7 @@ resetComputer model =
       False
   }
   , Cmd.batch
-    [ scrollIntoViewPort "instruction0"
+    [ scrollIntoViewPort [ getInstructionId 0 ]
     , resetComputerPort model.ramDisplaySize
     ]
   )
@@ -1141,13 +1142,20 @@ stepComputer : Model -> (Model, Cmd Msg)
 stepComputer model =
   let
     instructionId =
-      "instruction" ++ String.fromInt model.computer.pc
+      getInstructionId model.computer.pc
+    
+    ramCellIds =
+      List.map
+        (\ramIndex ->
+          getRamCellId ramIndex model.computer.a
+        )
+        (List.range 0 <| model.ramSections - 1)
   in
   ( model
   , Cmd.batch
     [ step model.ramDisplaySize 1
     , if model.isAnimated then
-      scrollIntoViewPort instructionId
+      scrollIntoViewPort <| instructionId :: ramCellIds
     else
       Cmd.none
     ]
@@ -1205,6 +1213,11 @@ startEditingRam ramIndex cellIndex model =
 getRamCellId : Int -> Int -> String
 getRamCellId ramIndex cellIndex =
   "ram-" ++ String.fromInt ramIndex ++ "-" ++ String.fromInt cellIndex
+
+
+getInstructionId : Int -> String
+getInstructionId instructionIndex =
+  "instruction-" ++ String.fromInt instructionIndex
 
 
 editRam : Int -> String -> Model -> (Model, Cmd Msg)

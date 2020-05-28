@@ -144,9 +144,15 @@ app.ports.resetComputerPort.subscribe(function(ramDisplaySize) {
   screen.clearRect(0, 0, screen.canvas.width, screen.canvas.height);
 });
 
-app.ports.scrollIntoViewPort.subscribe(function(id) {
-  var element = document.getElementById(id);
-  element.scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+app.ports.scrollIntoViewPort.subscribe(function(ids) {
+  ids.forEach(function(id) {
+    var element = document.getElementById(id);
+    if (element !== null) {
+      setTimeout(function() {
+        element.scrollIntoView({block: "nearest"});
+      }, 100);
+    }
+  });
 });
 
 app.ports.showProgramEditorPort.subscribe(function() {
