@@ -86,6 +86,8 @@ type Msg
   | EditRamRangeEnd Int String
   | ShowMoreRam Int
   | RamScrollMsg Int InfiniteScroll.Msg
+  | AddRamSection Int
+  | RemoveRamSection Int
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
   | SaveModel
@@ -237,6 +239,8 @@ type alias Memory =
 colors =
   { white =
     E.rgb255 255 255 255
+  , black =
+    E.rgb255 0 0 0
   , lightGreen =
     E.rgb255 102 255 102
   , lightGrey =
@@ -309,7 +313,7 @@ defaultModel =
   , ramScrolls =
     Array.initialize 2 <| (\index -> InfiniteScroll.init <| showMoreRamCmd index)
   , editingRamIndices =
-    Array.fromList [ Nothing, Nothing ]
+    Array.empty
   , ramDisplaySize =
     0
   , romScroll =
@@ -324,7 +328,7 @@ defaultModel =
 defaultLayout : Layout
 defaultLayout =
   Array.fromList
-    [ (0, 256)
+    [ (0, 255)
     ]
 
 
@@ -390,7 +394,7 @@ M=D
 """
   , layout =
     Array.fromList
-    [ (0, 256)
+    [ (0, 255)
     , (65536, 84736)
     ]
   }
@@ -504,6 +508,9 @@ updateLayout  model =
     
     ramSections =
       Array.length ramRanges
+
+    editingRamIndices =
+      Array.repeat ramSections Nothing
   in
   { model
     | ramRanges =
@@ -514,6 +521,8 @@ updateLayout  model =
       ramDisplaySize
     , ramSections =
       ramSections
+    , editingRamIndices =
+      editingRamIndices
   }
 
 
@@ -577,7 +586,7 @@ view model =
     ] <|
     E.row
       [ E.width E.fill
-      , E.spacing 20
+      , E.spacing 30
       ]
       [ E.column
         [ E.spacing 20
@@ -585,7 +594,7 @@ view model =
         , Background.color colors.white
         ]
         [ E.row
-          [ E.spacing 20 ] <|
+          [ E.spacing 30 ] <|
           List.map
           (viewRam model)
           (List.range 0 (model.ramSections - 1))
@@ -822,6 +831,11 @@ viewRam model ramIndex =
   in
   E.column
     [ E.width <| E.px 210
+    , E.onRight <|
+      E.column []
+      [ viewAddRamSectionButton (ramIndex + 1)
+      , viewRemoveRamSectionButton ramIndex
+      ]
     ] <|
     [ E.row[]
       [ E.text <| "RAM "
@@ -925,6 +939,42 @@ viewRam model ramIndex =
           ]
       }
     ]
+
+
+viewAddRamSectionButton : Int -> E.Element Msg
+viewAddRamSectionButton ramIndex =
+  Input.button
+  [ Background.color colors.white
+  , Font.color colors.darkGrey
+  , E.mouseOver
+    [ Font.color colors.black ]
+  ]
+  { onPress =
+    Just <| AddRamSection ramIndex
+  , label =
+    E.html
+    ( FeatherIcons.plusSquare |>
+      FeatherIcons.toHtml []
+    )
+  }
+
+
+viewRemoveRamSectionButton : Int -> E.Element Msg
+viewRemoveRamSectionButton ramIndex =
+  Input.button
+  [ Background.color colors.white
+  , Font.color colors.darkGrey
+  , E.mouseOver
+    [ Font.color colors.black ]
+  ]
+  { onPress =
+    Just <| RemoveRamSection ramIndex
+  , label =
+    E.html
+    ( FeatherIcons.minusSquare |>
+      FeatherIcons.toHtml []
+    )
+  }
 
 
 indexedTable :
@@ -1090,6 +1140,12 @@ update msg model =
     ShowMoreRam ramIndex ->
       showMoreRam ramIndex model
 
+    AddRamSection ramIndex ->
+      addRamSection ramIndex model
+    
+    RemoveRamSection ramIndex ->
+      removeRamSection ramIndex model
+
     RomScrollMsg scrollMsg ->
       let
         ( nextRomScroll, cmd ) =
@@ -1111,6 +1167,34 @@ update msg model =
 
     NoOp ->
       (model, Cmd.none)
+
+
+addRamSection : Int -> Model -> (Model, Cmd Msg)
+addRamSection ramIndex model =
+  let
+    newLayout =
+      insertToArray ramIndex (0, 255) model.ramRanges
+  in
+  ( updateLayout <|
+    updateActiveProgram
+    (\oldProgram -> { oldProgram | layout = newLayout })
+    model
+  , Cmd.none
+  )
+
+
+removeRamSection : Int -> Model -> (Model, Cmd Msg)
+removeRamSection ramIndex model =
+  let
+    newLayout =
+      Array.Extra.removeAt ramIndex model.ramRanges
+  in
+  ( updateLayout <|
+    updateActiveProgram
+    (\oldProgram -> { oldProgram | layout = newLayout })
+    model
+  , Cmd.none
+  )
 
 
 showMoreRam : Int -> Model -> (Model, Cmd Msg)
@@ -1601,3 +1685,23 @@ unzipArray arr =
     )
     (Array.empty, Array.empty)
     arr
+
+
+insertToArray : Int -> a -> Array a -> Array a
+insertToArray index val values =
+  let
+    length =
+      Array.length values
+  in
+  if index >= 0 && index <= length then
+    let
+      before =
+        Array.slice 0 index values
+
+      after =
+        Array.slice index length values
+    in
+    Array.append (Array.push val before) after
+
+  else
+    values
