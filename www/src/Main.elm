@@ -1274,7 +1274,9 @@ editRamRange f ramIndex cellIndexStr model =
           maxCellIndex =
             getMaxRangeIndex newModel.ramRanges
         in
-        ( if maxCellIndex >= newModel.ramDisplaySize then
+        ( updateActiveProgram
+          (\oldProgram -> { oldProgram | layout = newRamRanges }) <|
+          if maxCellIndex >= newModel.ramDisplaySize then
             loadMoreRam (maxCellIndex + 1) newModel
           else
             newModel
