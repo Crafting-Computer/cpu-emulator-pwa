@@ -98,6 +98,18 @@ pub fn edit_ram(index: usize, value: i32) {
 }
 
 #[wasm_bindgen]
+pub fn set_ram(values: Vec<i32>) {
+    unsafe {
+    // reset all rom registers to 0
+    computer.ram = [0; RAM_SIZE];
+    // set the edited registers
+    for (i, v) in values.iter().enumerate() {
+        computer.ram[i] = *v;
+    }
+    }
+}
+
+#[wasm_bindgen]
 pub fn reset(ram_display_size: usize) -> JsValue {
     unsafe {
     computer.a = 0;

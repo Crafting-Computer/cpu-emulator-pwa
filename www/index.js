@@ -131,6 +131,10 @@ app.ports.editRamPort.subscribe(function([index, value]) {
   wasm.edit_ram(index, value);
 });
 
+app.ports.setRamPort.subscribe(function(values) {
+  wasm.set_ram(values);
+})
+
 function updateScreen(pixels) {
   pixels.forEach(function({ x, y, color }) {
     screen.fillStyle = color;

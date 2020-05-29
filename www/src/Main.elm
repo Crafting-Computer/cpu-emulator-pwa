@@ -38,6 +38,7 @@ port askForComputerPort : Int -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
+port setRamPort : Array Int -> Cmd msg
 port resetComputerPort : Int -> Cmd msg
 port saveModelPort : Encode.Value -> Cmd msg
 
@@ -485,7 +486,7 @@ init savedModelString =
   in
   compileProgram
     (\_ m ->
-      (m, Cmd.none)
+      (m, setRamPort m.computer.ram)
     )
     model
 
@@ -1406,7 +1407,7 @@ setActiveProgramIndex : Int -> Model -> (Model, Cmd Msg)
 setActiveProgramIndex newIndex model =
   compileProgram
     (\_ m ->
-      (m, Cmd.none)
+      (m, setRamPort m.computer.ram)
     )
     <| updateLayout { model
       | activeProgramIndex =
