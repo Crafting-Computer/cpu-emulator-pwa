@@ -51,7 +51,7 @@ type alias Model =
   , showProgramList : Bool
   , isEditingProgram : Bool
   , instructions : Array String
-  , showLabels : Bool
+  , showLabelInstructions : Bool
   , isRunningComputer : Bool
   , ramSections : Int
   , ramRanges : Array Range
@@ -93,6 +93,7 @@ type Msg
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
   | SaveModel
+  | ToggleshowLabelInstructions
   | NoOp
 
 
@@ -304,7 +305,7 @@ defaultModel =
     False
   , instructions =
     Array.repeat romSize ""
-  , showLabels =
+  , showLabelInstructions =
     True
   , isRunningComputer =
     False
@@ -756,7 +757,29 @@ viewRom model =
     [ E.width <| (E.fill |> E.minimum 210)
     , Background.color colors.white
     ] <|
-    [ E.text "ROM"
+    [ E.row [ E.width E.fill ]
+      [ E.text <|
+        if model.showLabelInstructions then
+          "INSTRUCTIONS"
+        else
+          "ROM"
+      , Input.button
+        [ E.alignRight ]
+        { onPress =
+          Just ToggleshowLabelInstructions
+        , label =
+          E.html <|
+          if model.showLabelInstructions then
+            FeatherIcons.toggleLeft
+            |> FeatherIcons.toHtml
+              [ Html.Attributes.style "fill" "black"
+              , Html.Attributes.style "stroke" "white"
+              ]
+          else
+            FeatherIcons.toggleRight
+            |> FeatherIcons.toHtml []
+        }
+      ]
     , indexedTable
       [ E.htmlAttribute <| InfiniteScroll.infiniteScroll RomScrollMsg
       , E.htmlAttribute <| Html.Attributes.style "height" "640px"
@@ -1197,8 +1220,44 @@ update msg model =
       , saveModelPort (encodeModel model)
       )
 
+    ToggleshowLabelInstructions ->
+      toggleshowLabelInstructions model
+
     NoOp ->
       (model, Cmd.none)
+
+
+toggleshowLabelInstructions : Model -> (Model, Cmd Msg)
+toggleshowLabelInstructions model =
+  let
+    newshowLabelInstructions =
+      not model.showLabelInstructions
+    
+    updatedPartOfInstructions =
+      if newshowLabelInstructions then
+        Array.fromList <| Assembler.parseProgramKeepLabels <| .content <| getActiveProgram model
+      else
+        case Assembler.parseProgram <| .content <| getActiveProgram model of
+          Ok instructions ->
+            Array.fromList <| 
+            List.map Assembler.instructionToString instructions
+          
+          Err _ ->
+            model.instructions
+
+    nextInstructions =
+      Array.append
+        updatedPartOfInstructions
+        (Array.repeat (romSize - (Array.length <| Array.filter (not << isLabelInstruction) updatedPartOfInstructions)) "")
+  in
+  ({ model
+    | showLabelInstructions =
+      newshowLabelInstructions
+    , instructions =
+      nextInstructions
+  }
+  , Cmd.none
+  )
 
 
 addRamSection : Int -> Model -> (Model, Cmd Msg)
@@ -1386,7 +1445,7 @@ compileProgram f model =
 
         updatedPartOfInstructions =
           Array.fromList <|
-            if model.showLabels then
+            if model.showLabelInstructions then
               Assembler.parseProgramKeepLabels <| .content <| getActiveProgram model
             else
             List.map Assembler.instructionToString instructions
