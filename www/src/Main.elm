@@ -965,6 +965,7 @@ viewRam model ramIndex =
                       ++ [ Events.onLoseFocus <| StopEditingRam ramIndex cellIndex
                         , E.htmlAttribute <| Html.Attributes.id <| getRamCellId ramIndex cellIndex
                         , E.width E.fill
+                        , E.padding 0
                       ])
                       { onChange =
                         EditRam cellIndex
