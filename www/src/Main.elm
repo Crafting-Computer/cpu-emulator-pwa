@@ -791,7 +791,7 @@ viewRom model =
                   let
                     commonStyle =
                       [ E.paddingXY 10 0
-                      , Border.width 1
+                      , E.htmlAttribute <| Html.Attributes.style "border-width" "0.5px 1px"
                       , E.height <| E.px 22
                       , E.width E.fill
                       , E.htmlAttribute <| Html.Attributes.id <| getInstructionId index
@@ -911,7 +911,7 @@ viewRam model ramIndex =
                   let
                     commonStyle =
                       [ E.paddingXY 10 0
-                      , Border.width 1
+                      , E.htmlAttribute <| Html.Attributes.style "border-width" "0.5px 1px"
                       , E.height <| E.px 22
                       , E.width <| E.px 130
                       ]
