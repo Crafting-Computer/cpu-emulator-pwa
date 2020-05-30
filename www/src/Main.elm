@@ -51,6 +51,7 @@ type alias Model =
   , showProgramList : Bool
   , isEditingProgram : Bool
   , instructions : Array String
+  , showLabels : Bool
   , isRunningComputer : Bool
   , ramSections : Int
   , ramRanges : Array Range
@@ -303,6 +304,8 @@ defaultModel =
     False
   , instructions =
     Array.repeat romSize ""
+  , showLabels =
+    True
   , isRunningComputer =
     False
   , ramSections =
@@ -760,20 +763,31 @@ viewRom model =
       , E.htmlAttribute <| Html.Attributes.style "overflow-y" "auto"
       ]
       0
+      (\index instruction ->
+        if isLabelInstruction instruction then
+          index
+        else
+          index + 1
+      )
       { data = instructionData
       , columns =
           [ { header = E.none
             , width = E.px 60
             , view =
-              \index _ ->
+              \index instruction ->
                 E.el
                 [ Font.letterSpacing -0.5 ] <|
-                E.text <| String.fromInt index
+                E.text <|
+                  -- label is not actually stored in the ROM
+                  if isLabelInstruction instruction then
+                    ""
+                  else
+                    String.fromInt index
           }
           , { header = E.none
             , width = E.fill
             , view =
-                \index cell ->
+                \index instruction ->
                   let
                     commonStyle =
                       [ E.paddingXY 10 0
@@ -784,20 +798,27 @@ viewRom model =
                       ]
 
                     cellStyle =
-                      ( if model.isAnimated && index == model.computer.pc then
+                      if model.isAnimated
+                      && index == model.computer.pc
+                      && not (isLabelInstruction instruction)
+                      then
                           commonStyle
                           ++ [ Background.color colors.lightGreen
                           ]
-                        else
-                          commonStyle
-                      )
+                      else
+                        commonStyle
                   in
                   E.el cellStyle <|
-                    E.text cell
+                    E.text instruction
             }
           ]
       }
     ]
+
+
+isLabelInstruction : String -> Bool
+isLabelInstruction instruction =
+  String.startsWith "(" instruction
 
 
 viewRegister : String -> Int -> Bool -> E.Element Msg
@@ -870,6 +891,9 @@ viewRam model ramIndex =
       , E.htmlAttribute <| Html.Attributes.style "overflow-y" "auto"
       ]
       startCellIndex
+      (\index _ ->
+        index + 1
+      )
       { data = memoryData
       , columns =
           [ { header = E.none
@@ -981,26 +1005,33 @@ viewRemoveRamSectionButton ramIndex =
 indexedTable :
   List (E.Attribute Msg) ->
   Int ->
+  (Int -> record -> Int) ->
   { data : List record
   , columns : List (E.IndexedColumn record Msg)
   } -> E.Element Msg
-indexedTable attributes startIndex { data, columns } =
+indexedTable attributes startIndex getNextIndex { data, columns } =
   E.column
   ( attributes
     ++ [ E.width E.fill ]
   ) <|
-  List.indexedMap
-    (\index cell ->
-      E.row [ E.width E.fill ] <|
-      List.map
-      (\column ->
-        E.el
-        [ E.width <| column.width
-        ] <|
-        column.view (index +startIndex) cell
+  List.reverse <|
+  Tuple.second <|
+  List.foldl
+    (\cell (index, table) ->
+      ( getNextIndex index cell
+      , ( E.row [ E.width E.fill ] <|
+        List.map
+        (\column ->
+          E.el
+          [ E.width <| column.width
+          ] <|
+          column.view (index + startIndex) cell
+        )
+        columns
+        ) :: table
       )
-      columns
     )
+    (0, [])
     data
 
 
@@ -1355,6 +1386,9 @@ compileProgram f model =
 
         updatedPartOfInstructions =
           Array.fromList <|
+            if model.showLabels then
+              Assembler.parseProgramKeepLabels <| .content <| getActiveProgram model
+            else
             List.map Assembler.instructionToString instructions
         
         nextInstructions =
