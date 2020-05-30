@@ -753,7 +753,7 @@ viewRom model =
       Array.toList <| Array.slice 0 model.romDisplaySize model.instructions
   in
   E.column
-    [ E.width <| E.px 210
+    [ E.width <| (E.fill |> E.minimum 210)
     , Background.color colors.white
     ] <|
     [ E.text "ROM"
@@ -793,7 +793,7 @@ viewRom model =
                       [ E.paddingXY 10 0
                       , Border.width 1
                       , E.height <| E.px 22
-                      , E.width <| E.px 130
+                      , E.width E.fill
                       , E.htmlAttribute <| Html.Attributes.id <| getInstructionId index
                       ]
 
