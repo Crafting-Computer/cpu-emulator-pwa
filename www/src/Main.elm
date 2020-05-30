@@ -39,6 +39,7 @@ port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
 port editRamPort : (Int, Int) -> Cmd msg
 port setRamPort : Array Int -> Cmd msg
+port clearRamPort : Range -> Cmd msg
 port resetComputerPort : Int -> Cmd msg
 port saveModelPort : Encode.Value -> Cmd msg
 
@@ -90,6 +91,7 @@ type Msg
   | RamScrollMsg Int InfiniteScroll.Msg
   | AddRamSection Int
   | RemoveRamSection Int
+  | ClearRamSection Int
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
   | SaveModel
@@ -880,6 +882,7 @@ viewRam model ramIndex =
       E.column []
       [ viewAddRamSectionButton (ramIndex + 1)
       , viewRemoveRamSectionButton ramIndex
+      , viewClearRamSectionButton ramIndex
       ]
     ] <|
     [ E.row[]
@@ -987,6 +990,24 @@ viewRam model ramIndex =
           ]
       }
     ]
+
+
+viewClearRamSectionButton : Int -> E.Element Msg
+viewClearRamSectionButton ramIndex =
+  Input.button
+  [ Background.color colors.white
+  , Font.color colors.darkGrey
+  , E.mouseOver
+    [ Font.color colors.black ]
+  ]
+  { onPress =
+    Just <| ClearRamSection ramIndex
+  , label =
+    E.html
+    ( FeatherIcons.file |>
+      FeatherIcons.toHtml []
+    )
+  }
 
 
 viewAddRamSectionButton : Int -> E.Element Msg
@@ -1201,6 +1222,9 @@ update msg model =
     RemoveRamSection ramIndex ->
       removeRamSection ramIndex model
 
+    ClearRamSection ramIndex ->
+      clearRamSection ramIndex model
+
     RomScrollMsg scrollMsg ->
       let
         ( nextRomScroll, cmd ) =
@@ -1257,6 +1281,27 @@ toggleshowLabelInstructions model =
       nextInstructions
   }
   , Cmd.none
+  )
+
+
+clearRamSection : Int -> Model -> (Model, Cmd Msg)
+clearRamSection ramIndex model =
+  let
+    oldComputer =
+      model.computer
+    
+    (start, end) =
+      Maybe.withDefault (0, 0) <| -- impossible
+      Array.get ramIndex model.ramRanges
+  in
+  ( { model
+    | computer =
+      { oldComputer
+        | ram =
+          replaceInArray start (end + 1) (Array.repeat (end - start + 1) 0) oldComputer.ram
+      }
+    }
+  , clearRamPort (start, end)
   )
 
 
@@ -1801,3 +1846,12 @@ insertToArray index val values =
 
   else
     values
+
+replaceInArray : Int -> Int -> Array a -> Array a -> Array a
+replaceInArray start end addedArr arr =
+  Array.append
+    (Array.slice 0 start arr)
+    ( Array.append
+      addedArr
+      (Array.slice end (Array.length arr) arr)
+    )

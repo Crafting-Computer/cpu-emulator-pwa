@@ -110,6 +110,16 @@ pub fn set_ram(values: Vec<i32>) {
 }
 
 #[wasm_bindgen]
+pub fn clear_ram(start_index: usize, end_index: usize) {
+    unsafe {
+    // set the edited registers
+    for i in start_index..=end_index {
+        computer.ram[i] = 0;
+    }
+    }
+}
+
+#[wasm_bindgen]
 pub fn reset(ram_display_size: usize) -> JsValue {
     unsafe {
     computer.a = 0;
