@@ -764,7 +764,7 @@ viewRom model =
       Array.toList <| Array.slice 0 model.romDisplaySize model.instructions
   in
   E.column
-    [ E.width <| (E.fill |> E.minimum 210)
+    [ E.width <| (E.fill |> E.minimum 210 |> E.maximum 420)
     , Background.color colors.white
     ] <|
     [ E.row [ E.width E.fill ]
