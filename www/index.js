@@ -106,15 +106,18 @@ app.ports.editProgramInEditorPort.subscribe(function(newContent) {
   editor.setValue(newContent);
 });
 
-app.ports.stepComputerPort.subscribe(function([ramDisplaySize, cycles]) {
-  let newComputer = wasm.step(ramDisplaySize, cycles);
+app.ports.stepComputerPort.subscribe(function(ramDisplaySize) {
+  let newComputer = wasm.step(ramDisplaySize);
   updateScreen(newComputer.updated_pixels);
   app.ports.receiveComputerPort.send(newComputer);
 });
 
-app.ports.stepComputeLite.subscribe(function(cycles) {
-  let updatedPixels = wasm.step_lite(cycles);
+app.ports.stepComputeLite.subscribe(function([breakpoints, cycles]) {
+  let [updatedPixels, reachedBreakpoint] = wasm.step_lite(breakpoints, cycles);
   updateScreen(updatedPixels);
+  if (reachedBreakpoint) {
+    app.ports.reachedBreakpointPort.send(null);
+  }
 });
 
 app.ports.askForComputerPort.subscribe(function(ramDisplaySize) {
@@ -133,7 +136,11 @@ app.ports.editRamPort.subscribe(function([index, value]) {
 
 app.ports.setRamPort.subscribe(function(values) {
   wasm.set_ram(values);
-})
+});
+
+app.ports.clearRamPort.subscribe(function([startIndex, endIndex]) {
+  wasm.clear_ram(startIndex, endIndex);
+});
 
 function updateScreen(pixels) {
   pixels.forEach(function({ x, y, color }) {

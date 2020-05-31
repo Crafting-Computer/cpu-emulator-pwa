@@ -3,6 +3,7 @@ port module Main exposing (main)
 
 import Array exposing (Array)
 import Array.Extra
+import Set exposing (Set)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -32,8 +33,9 @@ port editProgramInEditorPort : String -> Cmd msg
 port showAssemblerErrorPort : ((Int, Int), String) -> Cmd msg
 port clearAssemblerErrorPort : () -> Cmd msg
 port scrollIntoViewPort : List String -> Cmd msg
-port stepComputerPort : (Int, Int) -> Cmd msg
-port stepComputeLite : (Int) -> Cmd msg
+port stepComputerPort : Int -> Cmd msg
+port stepComputeLite : (List Int, Int) -> Cmd msg
+port reachedBreakpointPort : (() -> msg) -> Sub msg
 port askForComputerPort : Int -> Cmd msg
 port receiveComputerPort : (Decode.Value -> msg) -> Sub msg
 port editRomPort : Array Int -> Cmd msg
@@ -62,6 +64,7 @@ type alias Model =
   , ramDisplaySize : Int
   , romScroll : InfiniteScroll.Model Msg
   , romDisplaySize : Int
+  , breakpoints : Set Int
   , isAnimated : Bool
   }
 
@@ -94,6 +97,8 @@ type Msg
   | ClearRamSection Int
   | RomScrollMsg InfiniteScroll.Msg
   | LoadedMoreRom
+  | SetBreakpoint Int
+  | RemoveBreakpoint Int
   | SaveModel
   | ToggleshowLabelInstructions
   | NoOp
@@ -140,6 +145,7 @@ encodeModel model =
     [ ("programs", Encode.array encodeProgram model.programs)
     , ("activeProgramIndex", Encode.int model.activeProgramIndex)
     , ("computer", encodeComputer model.computer)
+    , ("breakpoints", Encode.set Encode.int model.breakpoints)
     ]
 
 
@@ -195,6 +201,7 @@ decodeModel =
   Field.require "programs" (Decode.array decodeProgram) <| \programs ->
   Field.require "activeProgramIndex" Decode.int <| \activeProgramIndex ->
   Field.require "computer" decodeComputer <| \computer ->
+  Field.require "breakpoints" (Decode.list Decode.int) <| \breakpoints ->
 
   Decode.succeed <|
     updateLayout
@@ -205,6 +212,8 @@ decodeModel =
           programs
         , activeProgramIndex =
           activeProgramIndex
+        , breakpoints =
+          Set.fromList breakpoints
       }
 
 
@@ -248,6 +257,8 @@ colors =
     E.rgb255 0 0 0
   , lightGreen =
     E.rgb255 102 255 102
+  , lightYellow =
+    E.rgb255 255 255 0
   , lightGrey =
     E.rgb255 220 220 220
   , darkGrey =
@@ -327,6 +338,8 @@ defaultModel =
     InfiniteScroll.init loadMoreRom
   , romDisplaySize =
     50
+  , breakpoints =
+    Set.empty
   , isAnimated =
     True
   }
@@ -575,11 +588,6 @@ msgToCmd x =
     Task.perform identity (Task.succeed x)
 
 
-step : Int -> Int -> Cmd Msg
-step ramDisplaySize cycles =
-  stepComputerPort (ramDisplaySize, cycles)
-
-
 view : Model -> Html Msg
 view model =
   E.layout
@@ -800,14 +808,32 @@ viewRom model =
             , width = E.px 60
             , view =
               \index instruction ->
-                E.el
-                [ Font.letterSpacing -0.5 ] <|
-                E.text <|
-                  -- label is not actually stored in the ROM
-                  if isLabelInstruction instruction then
-                    ""
-                  else
-                    String.fromInt index
+                -- label is not actually stored in the ROM
+                if isLabelInstruction instruction then
+                  E.none
+                else
+                  Input.button [ E.width E.fill ]
+                  { onPress =
+                    if Set.member index model.breakpoints then
+                      Just <| RemoveBreakpoint index
+                    else
+                      Just <| SetBreakpoint index
+                  , label =
+                    E.el [ Font.letterSpacing -0.5, E.width E.fill ] <|
+                    E.row [ E.width E.fill ]
+                    [ E.text (String.fromInt index)
+                    , E.el [ E.alignRight ] <|
+                      if Set.member index model.breakpoints then
+                      E.html (FeatherIcons.circle |> FeatherIcons.toHtml
+                        [ Html.Attributes.style "fill" "red"
+                        , Html.Attributes.style "stroke" "red"
+                        , Html.Attributes.style "width" "20px"
+                        ]
+                      )
+                    else
+                      E.none
+                    ]
+                  }
           }
           , { header = E.none
             , width = E.fill
@@ -827,9 +853,12 @@ viewRom model =
                       && index == model.computer.pc
                       && not (isLabelInstruction instruction)
                       then
+                        if Set.member index model.breakpoints then
                           commonStyle
-                          ++ [ Background.color colors.lightGreen
-                          ]
+                          ++ [ Background.color colors.lightYellow ]
+                        else
+                          commonStyle
+                          ++ [ Background.color colors.lightGreen ]
                       else
                         commonStyle
                   in
@@ -1240,6 +1269,12 @@ update msg model =
       in
       ( { model | romScroll = nextRomScroll, romDisplaySize = model.romDisplaySize + 200 }, Cmd.none )
 
+    SetBreakpoint pc ->
+      setBreakpoint pc model
+    
+    RemoveBreakpoint pc ->
+      removeBreakpoint pc model
+
     SaveModel ->
       ( model
       , saveModelPort (encodeModel model)
@@ -1250,6 +1285,26 @@ update msg model =
 
     NoOp ->
       (model, Cmd.none)
+
+
+removeBreakpoint : Int -> Model -> (Model, Cmd Msg)
+removeBreakpoint pc model =
+  ({ model
+    | breakpoints =
+      Set.remove pc model.breakpoints
+  }
+  , Cmd.none
+  )
+
+
+setBreakpoint : Int -> Model -> (Model, Cmd Msg)
+setBreakpoint pc model =
+  ({ model
+    | breakpoints =
+      Set.insert pc model.breakpoints
+  }
+  , Cmd.none
+  )
 
 
 toggleshowLabelInstructions : Model -> (Model, Cmd Msg)
@@ -1631,7 +1686,7 @@ stepComputer model =
   in
   ( model
   , Cmd.batch
-    [ step model.ramDisplaySize 1
+    [ stepComputerPort model.ramDisplaySize
     , if model.isAnimated then
       scrollIntoViewPort <| instructionId :: ramCellIds
     else
@@ -1650,7 +1705,7 @@ stepComputerOneFrame time model =
       ceiling ((timeToRun / 1000) * 700 * 1024)
   in
   ( model
-  , stepComputeLite cycles
+  , stepComputeLite (Set.toList model.breakpoints, cycles)
   )
 
 
@@ -1674,7 +1729,10 @@ stopRunningComputer model =
     , isAnimated =
       True
   }
-  , askForComputerPort model.ramDisplaySize
+  , Cmd.batch
+    [ askForComputerPort model.ramDisplaySize
+    , scrollIntoViewPort [ getInstructionId model.computer.pc ]
+    ]
   )
 
 
@@ -1801,6 +1859,7 @@ subscriptions model =
     else
       Time.every 2000 (\_ -> SaveModel)
     , receiveComputerPort ReceivedComputer
+    , reachedBreakpointPort (\_ -> StopRunningComputer)
     ]
 
 

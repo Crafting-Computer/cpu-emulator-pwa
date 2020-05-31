@@ -57,6 +57,9 @@ static mut computer: Computer = Computer {
     rom : [0; ROM_SIZE],
 };
 
+// set by step_internal and reset by ask_for_computer
+static mut reached_breakpoint: bool = false;
+
 #[wasm_bindgen]
 pub fn initialize() {
     unsafe {
@@ -140,9 +143,9 @@ pub fn reset(ram_display_size: usize) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn step(ram_display_size: usize, cycles: usize) -> JsValue {
+pub fn step(ram_display_size: usize) -> JsValue {
     unsafe {
-    let updated_pixels = step_internal(cycles);
+    let (updated_pixels, _) = step_internal(Vec::new(), 1);
     let new_computer = generate_computer_for_js(ram_display_size, updated_pixels);
     
     JsValue::from_serde(&new_computer).unwrap()
@@ -163,39 +166,52 @@ fn generate_computer_for_js(ram_display_size: usize, updated_pixels: Vec<Pixel>)
 }
 
 #[wasm_bindgen]
-pub fn step_lite(cycles: usize) -> JsValue {
+pub fn step_lite(breakpoints: Vec<usize>, cycles: usize) -> JsValue {
     unsafe {
-    let updated_pixels = step_internal(cycles);
+    let result = step_internal(breakpoints, cycles);
     
-    JsValue::from_serde(&updated_pixels).unwrap()
+    JsValue::from_serde(&result).unwrap()
     }
 }
 
-pub fn step_internal(cycles: usize) -> Vec<Pixel> {
+pub fn step_internal(breakpoints: Vec<usize>, cycles: usize) -> (Vec<Pixel>, bool) {
     unsafe {
     let mut updated_pixels = Vec::new();
-    for _ in 0..cycles {
-        match computer.rom.get(computer.pc as usize) {
-            Some(instruction) => {
-                // print("instruction", instruction);
-                let op_code = get_bit(31, *instruction);
-                // print("op_code", op_code);
-                if !op_code {
-                    step_a_instruction(*instruction);
-                } else {
-                    updated_pixels.extend(step_c_instruction(drop_bits(19, *instruction)));
+    let start_pc = computer.pc;
+    if reached_breakpoint {
+        (Vec::new(), reached_breakpoint)
+    } else {
+        for _ in 0..cycles {
+            if breakpoints.contains(&(computer.pc as usize)) && computer.pc != start_pc {
+                reached_breakpoint = true;
+                break;
+            } else {
+                match computer.rom.get(computer.pc as usize) {
+                    Some(instruction) => {
+                        // print("instruction", instruction);
+                        let op_code = get_bit(31, *instruction);
+                        // print("op_code", op_code);
+                        if !op_code {
+                            step_a_instruction(*instruction);
+                        } else {
+                            updated_pixels.extend(step_c_instruction(drop_bits(19, *instruction)));
+                        }
+                    }
+                    None => {}
                 }
             }
-            None => {}
         }
+        (updated_pixels, reached_breakpoint)
     }
-    updated_pixels
     }
 }
 
 #[wasm_bindgen]
 pub fn ask_for_computer(ram_display_size: usize) -> JsValue {
     let new_computer = generate_computer_for_js(ram_display_size, Vec::new());
+    unsafe {
+    reached_breakpoint = false;
+    }
     JsValue::from_serde(&new_computer).unwrap()
 }
 
