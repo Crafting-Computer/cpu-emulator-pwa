@@ -109,6 +109,16 @@ You are all set for the new optimized version.
 
 # Change Log
 
+## Release v0.5.0
+
+* Decrease cycle per frame for more consistent performance
+* Don't clear RAM when resetting computer
+* Use infiniteScroll to lazily show ram sections
+* Custom layout for each program
+* Can toggle whether to show original or assembled version of assembly code
+* Can clear RAM sections
+* Support breakpoints on PC (program counter)
+
 ## Release v0.4.0
 
 * [Emulator Bug Fix] Update virtual register M in C instruction according to register A
